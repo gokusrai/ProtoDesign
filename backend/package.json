@@ -1,0 +1,46 @@
+{
+  "name": "protodesign-backend",
+  "version": "1.0.0",
+  "description": "ProtoDesign 3D Printing E-Commerce Backend",
+  "type": "module",
+  "main": "dist/app.js",
+  "scripts": {
+    "dev": "tsx app.ts",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev:network": "cross-env HOST=0.0.0.0 PORT=3001 tsx app.ts",
+    "start:network": "cross-env HOST=0.0.0.0 PORT=3001 node dist/app.js",
+    "db:setup": "psql -U postgres -f migrations/000_create_database.sql",
+    "migrate": "psql -U protodesign_user -d protodesign -f migrations/001_initial_schema.sql",
+    "db:reset": "npm run db:setup && npm run migrate",
+    "migrate:test": "psql -U protodesign_user -d protodesign -c \"SELECT * FROM users;\""
+  },
+  "keywords": [],
+  "author": "Your Name",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "pg": "^8.11.0",
+    "pg-promise": "^12.3.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "REMOVED",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.15.6",
+    "@types/pg-promise": "^0.0.28",
+    "cross-env": "^7.0.3",
+    "tsx": "^4.19.1",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.2.0"
+  }
+}
