@@ -25,6 +25,8 @@ import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
 import { formatINR } from "@/lib/currency";
 import { motion, AnimatePresence } from "framer-motion";
+import { Play } from "lucide-react";
+
 
 // --- INTERFACES ---
 interface ProductImage {
@@ -50,6 +52,7 @@ interface Product {
     average_rating?: number;
     review_count?: number;
     specifications?: Record<string, string>;
+    video_url?: string | null;
 }
 
 interface Review {
@@ -166,6 +169,8 @@ const ProductDetail = () => {
 
     const [isAddingToCart, setIsAddingToCart] = useState(false);
 
+
+
     // --- INITIAL DATA FETCH ---
     useEffect(() => {
         const loadData = async () => {
@@ -235,6 +240,9 @@ const ProductDetail = () => {
     const getProductImages = (): string[] => {
         if (!product) return [];
         const images: string[] = [];
+        // Add Video first (optional, or add it last)
+        if (product.video_url) images.push(product.video_url);
+
         if (product.product_images?.length) {
             product.product_images.forEach(img => {
                 const url = img.image_url || img.image_data;
@@ -242,9 +250,12 @@ const ProductDetail = () => {
             });
         }
         if (!images.length && product.image_url) images.push(product.image_url);
-        if (!images.length) images.push("/placeholder.svg");
+        // ...
         return images;
     };
+
+    // Helper to check if URL is video
+    const isVideo = (url: string) => url.includes('.mp4') || url.includes('.webm') || url.includes('video');
 
     const handleAddToCart = async () => {
         if (!product) return;
@@ -329,9 +340,20 @@ const ProductDetail = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 mb-24">
 
                     {/* LEFT: GALLERY */}
-                    <div className="space-y-6 sticky top-24 h-fit">
-                        <div className="w-[85%] mx-auto aspect-[4/5] bg-white rounded-2xl shadow-sm border border-border/50 relative z-10">
-                            <ImageMagnifier src={activeImage || productImages[0]} />
+                    <div className="space-y-6 top-24 h-fit">
+                        <div className="w-[85%] mx-auto aspect-[4/5] bg-white rounded-2xl shadow-sm border border-border/50 relative z-10 flex items-center justify-center overflow-hidden">
+                            {activeImage && isVideo(activeImage) ? (
+                                <video
+                                    src={activeImage}
+                                    controls
+                                    autoPlay
+                                    muted
+                                    loop
+                                    className="w-full h-full object-contain"
+                                />
+                            ) : (
+                                <ImageMagnifier src={activeImage || productImages[0]} />
+                            )}
                         </div>
 
                         {/* Thumbnails */}
@@ -340,12 +362,17 @@ const ProductDetail = () => {
                                 {productImages.map((img, idx) => (
                                     <button
                                         key={idx}
-                                        onMouseEnter={() => setActiveImage(img)}
                                         onClick={() => setActiveImage(img)}
-                                        className={`w-16 h-16 rounded-lg border-2 overflow-hidden transition-all bg-white
-                                            ${activeImage === img ? 'border-primary ring-2 ring-primary/20 scale-105' : 'border-transparent hover:border-border'}`}
+                                        className={`w-16 h-16 rounded-lg border-2 overflow-hidden relative bg-white
+                            ${activeImage === img ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'}`}
                                     >
-                                        <img src={img} className="w-full h-full object-contain p-1" alt="Thumbnail" />
+                                        {isVideo(img) ? (
+                                            <div className="w-full h-full flex items-center justify-center bg-black/10">
+                                                <Play size={20} className="text-gray-800" />
+                                            </div>
+                                        ) : (
+                                            <img src={img} className="w-full h-full object-contain" alt="Thumbnail" />
+                                        )}
                                     </button>
                                 ))}
                             </div>

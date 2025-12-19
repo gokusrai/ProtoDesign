@@ -75,69 +75,83 @@
 
     /**
      * POST /api/orders
+     * Creates an order AND decrements stock
      */
     router.post('/', authMiddleware, async (req, res, next) => {
         try {
-            // ✅ Receive shippingAmount explicitly
             const { items, shippingAddress, paymentGateway, shippingAmount } = req.body;
 
-            if (!items || !items.length) {
-                return res.status(400).json({ error: 'No items in order' });
+            if (!items || !items.length) return res.status(400).json({ error: 'No items in order' });
+
+            // 1. Fetch products to check stock and price
+            const productIds = items.map(i => i.product_id);
+            const products = await db.many('SELECT id, price, stock, name FROM products WHERE id IN ($1:csv)', [productIds]);
+
+            const productMap = {};
+            products.forEach(p => productMap[p.id] = p);
+
+            // 2. Validate Stock & Calculate Totals
+            let subtotal = 0;
+            const verifiedItems = [];
+
+            for (const item of items) {
+                const product = productMap[item.product_id];
+                if (!product) throw new Error(`Product not found: ${item.product_id}`);
+
+                // 🔥 Check Stock
+                if (product.stock < item.quantity) {
+                    return res.status(400).json({ error: `Not enough stock for ${product.name}. Available: ${product.stock}` });
+                }
+
+                const quantity = parseInt(item.quantity) || 1;
+                const lineTotal = parseFloat(product.price) * quantity;
+                subtotal += lineTotal;
+                verifiedItems.push({ ...item, price: product.price, quantity, lineTotal });
             }
 
-            // 1. Fetch real prices
-            const productIds = items.map(i => i.product_id);
-            const products = await db.many('SELECT id, price FROM products WHERE id IN ($1:csv)', [productIds]);
-            const priceMap = {};
-            products.forEach(p => priceMap[p.id] = parseFloat(p.price));
-
-            // 2. Calculate Financials
-            let subtotal = 0;
-            const verifiedItems = items.map(item => {
-                const price = priceMap[item.product_id] || 0;
-                const quantity = parseInt(item.quantity) || 1;
-                const lineTotal = price * quantity;
-                subtotal += lineTotal;
-                return { ...item, price, quantity, lineTotal };
-            });
-
-            // ✅ Use provided shipping amount (default to 50 if missing)
             const shipping = shippingAmount !== undefined ? parseFloat(shippingAmount) : 50.00;
             const gst = subtotal * 0.18;
             const totalAmount = subtotal + gst + shipping;
 
-            // 3. Save to DB
+            // 3. Create Order & Update Stock in Transaction
             const newOrder = await db.tx(async t => {
+                // A. Create Order
                 const order = await t.one(
-                    `INSERT INTO orders 
-                (user_id, subtotal_amount, tax_amount, shipping_amount, total_amount, shipping_address, payment_gateway, status)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
-                RETURNING *`,
+                    `INSERT INTO orders
+                     (user_id, subtotal_amount, tax_amount, shipping_amount, total_amount, shipping_address, payment_gateway, status)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+                         RETURNING *`,
                     [req.userId, subtotal, gst, shipping, totalAmount, JSON.stringify(shippingAddress), paymentGateway]
                 );
 
-                const itemQueries = verifiedItems.map(item => {
-                    return t.none(
-                        `INSERT INTO order_items (order_id, product_id, quantity, price, line_total)
-                     VALUES ($1, $2, $3, $4, $5)`,
-                        [order.id, item.product_id, item.quantity, item.price, item.lineTotal]
-                    );
+                // B. Insert Items & Decrement Stock
+                const queries = verifiedItems.map(item => {
+                    return [
+                        t.none(
+                            `INSERT INTO order_items (order_id, product_id, quantity, price, line_total)
+                         VALUES ($1, $2, $3, $4, $5)`,
+                            [order.id, item.product_id, item.quantity, item.price, item.lineTotal]
+                        ),
+                        // 🔥 Decrement Stock
+                        t.none(
+                            `UPDATE products SET stock = stock - $1 WHERE id = $2`,
+                            [item.quantity, item.product_id]
+                        )
+                    ];
                 });
-                await t.batch(itemQueries);
+
+                await t.batch(queries.flat()); // Flatten array of arrays
                 return order;
             });
 
-            // 4. Email
-            try {
-                const user = await db.one('SELECT email, full_name FROM users WHERE id = $1', [req.userId]);
-                await emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems);
-            } catch (err) {
-                console.error('Email failed:', err);
-            }
+            // 4. Send Email (Async)
+            db.one('SELECT email, full_name FROM users WHERE id = $1', [req.userId])
+                .then(user => emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems))
+                .catch(err => console.error('Email failed:', err));
 
             res.status(201).json({ message: 'Order placed successfully', orderId: newOrder.id });
         } catch (error) {
-            console.error('Place Order Error:', error);
+            console.error('Order Error:', error);
             next(error);
         }
     });

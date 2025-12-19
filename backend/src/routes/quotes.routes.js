@@ -1,21 +1,21 @@
 import express from 'express';
 import multer from 'multer';
 import nodemailer from 'nodemailer';
+import db from '../config/database.js';
+import { storageService } from '../services/storage.service.js';
 
 const router = express.Router();
 
-// Memory storage for file attachment
+// 1. Upload Configuration (Memory Storage to access buffer for Cloudinary)
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 }
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
 });
 
+// 2. Email Configuration
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
 });
 
 router.post('/request', upload.single('file'), async (req, res) => {
@@ -23,74 +23,173 @@ router.post('/request', upload.single('file'), async (req, res) => {
         const { email, phone, notes, specifications } = req.body;
         const file = req.file;
 
-        if (!file) {
-            return res.status(400).json({ error: 'No file uploaded' });
-        }
+        if (!file) return res.status(400).json({ error: 'No file uploaded' });
 
-        // Parse the JSON string we sent from frontend
+        // A. Upload to Cloudinary
+        const fileUrl = await storageService.uploadFile(file, 'quotes/stls');
+
+        // B. Parse Specifications
         let specs = {};
-        try {
-            specs = JSON.parse(specifications);
-        } catch (e) {
-            specs = { error: "Could not parse specs" };
-        }
+        try { specs = JSON.parse(specifications); } catch (e) { specs = {}; }
 
-        const mailOptions = {
-            from: `"ProtoDesign System" <${process.env.EMAIL_USER}>`,
-            to: 'harshsingh63056@gmail.com', // ✅ Sent explicitly to Admin
-            replyTo: email, // Reply directly to customer
-            subject: `NEW QUOTE: ${file.originalname} - ₹${specs.estimatedPrice}`,
-            html: `
-                <div style="font-family: Arial, sans-serif; border: 1px solid #ccc; padding: 20px; border-radius: 10px;">
-                    <h2 style="color: #007bff;">New 3D Printing Request</h2>
-                    
-                    <div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px;">
-                        <h3>👤 Customer Details</h3>
-                        <p><strong>Email:</strong> ${email}</p>
-                        <p><strong>Phone:</strong> ${phone}</p>
-                    </div>
+        const modelStats = specs.originalStats || {};
+        const printDims = specs.printDimensions || {};
 
-                    <div style="background: #e9f5ff; padding: 15px; margin-bottom: 20px;">
-                        <h3>⚙️ Print Configuration</h3>
-                        <ul>
-                            <li><strong>Material:</strong> ${specs.material}</li>
-                            <li><strong>Quality:</strong> ${specs.quality}</li>
-                            <li><strong>Infill:</strong> ${specs.infill}</li>
-                        </ul>
-                    </div>
+        // C. Save to Database
+        await db.none(`
+            INSERT INTO quotes (email, phone, file_url, file_name, specifications, estimated_price, admin_notes, status)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+        `, [
+            email,
+            phone,
+            fileUrl,
+            file.originalname,
+            specs,
+            specs.estimatedPrice || 0,
+            notes
+        ]);
 
-                    <div style="background: #fff8e1; padding: 15px; margin-bottom: 20px;">
-                        <h3>📊 Model Stats & Estimate</h3>
-                        <ul>
-                            <li><strong>Volume:</strong> ${specs.stats?.volume} cm³</li>
-                            <li><strong>Dimensions:</strong> ${specs.stats?.dimensions?.x} x ${specs.stats?.dimensions?.y} x ${specs.stats?.dimensions?.z} cm</li>
-                            <li><strong>Est. Time:</strong> ${specs.estimatedTime}</li>
-                            <li><strong>Est. Price:</strong> ₹${specs.estimatedPrice}</li>
-                        </ul>
-                    </div>
-
-                    <p><strong>Customer Notes:</strong><br/>${notes || "None"}</p>
-                    
-                    <hr/>
-                    <p style="font-size: 12px; color: #666;">
-                        The 3D model file is attached to this email. Open it in your slicer to verify the price.
-                    </p>
+        // D. Prepare Email Content (The "Dark Theme" Format)
+        const adminHtml = `
+            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 1px solid #1e293b; max-width: 600px; margin: 0 auto; border-radius: 8px; overflow: hidden; background-color: #0f172a; color: #e2e8f0;">
+                
+                <div style="background-color: #1e293b; padding: 20px; text-align: center; border-bottom: 2px solid #3b82f6;">
+                    <h2 style="color: #ffffff; margin: 0;">New 3D Printing Request</h2>
                 </div>
-            `,
-            attachments: [
-                {
+                
+                <div style="padding: 25px;">
+                    
+                    <div style="background: #1e293b; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                        <h3 style="margin-top: 0; color: #93c5fd; font-size: 16px; margin-bottom: 10px;">👤 Customer Details</h3>
+                        <p style="margin: 5px 0; color: #cbd5e1;"><strong>Email:</strong> <a href="mailto:${email}" style="color: #60a5fa;">${email}</a></p>
+                        <p style="margin: 5px 0; color: #cbd5e1;"><strong>Phone:</strong> ${phone}</p>
+                    </div>
+
+                    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+                        
+                        <div style="flex: 1; background: #172554; padding: 15px; border-radius: 6px; border: 1px solid #1e3a8a;">
+                            <h3 style="margin-top: 0; color: #60a5fa; font-size: 15px; margin-bottom: 10px;">⚙️ Settings</h3>
+                            <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; color: #e2e8f0;">
+                                <li style="margin-bottom: 6px;"><strong>Material:</strong> ${specs.material}</li>
+                                <li style="margin-bottom: 6px;"><strong>Quality:</strong> ${specs.quality}</li>
+                                <li style="margin-bottom: 6px;"><strong>Infill:</strong> ${specs.infill}</li>
+                                <li style="margin-bottom: 6px;"><strong>Scale:</strong> ${specs.scale || '100%'}</li>
+                            </ul>
+                        </div>
+                        
+                        <div style="flex: 1; background: #27272a; padding: 15px; border-radius: 6px; border: 1px solid #3f3f46;">
+                            <h3 style="margin-top: 0; color: #fb923c; font-size: 15px; margin-bottom: 10px;">📊 Model Analysis</h3>
+                            <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; color: #e2e8f0;">
+                                <li style="margin-bottom: 6px;"><strong>Volume:</strong> ${modelStats.volume?.toFixed(2) || 0} cm³</li>
+                                <li style="margin-bottom: 6px;"><strong>Weight:</strong> ${specs.estimatedWeight || 'N/A'}</li>
+                                <li style="margin-bottom: 6px;"><strong>Polygons:</strong> ${specs.polygonCount ? specs.polygonCount.toLocaleString() : 'N/A'}</li>
+                                <li style="margin-bottom: 6px;"><strong>Rotation:</strong> ${specs.rotation || '0,0,0'}</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="background: #1e293b; padding: 15px; border-radius: 6px; margin-bottom: 20px;">
+                        <h3 style="margin-top: 0; color: #facc15; font-size: 16px; margin-bottom: 5px;">✏️ Final Dimensions</h3>
+                        <p style="font-family: monospace; font-size: 16px; margin: 0; color: #ffffff;">
+                            ${printDims.x} x ${printDims.y} x ${printDims.z} cm
+                        </p>
+                    </div>
+
+                    <div style="border: 1px dashed #475569; padding: 15px; border-radius: 6px; margin-bottom: 25px;">
+                         <h3 style="margin-top: 0; color: #94a3b8; font-size: 15px; margin-bottom: 5px;">📝 Customer Notes</h3>
+                         <p style="font-style: italic; color: #cbd5e1; margin: 0;">"${notes || "None provided"}"</p>
+                    </div>
+
+                    <div style="text-align: center; padding-top: 10px;">
+                        <div style="display: inline-block; padding: 12px 25px; background-color: #334155; border-radius: 50px;">
+                            <span style="font-weight: bold; color: #94a3b8; margin-right: 15px;">Est. Time: ${specs.estimatedTime}</span>
+                            <span style="font-weight: bold; color: #ffffff; font-size: 18px;">Total: ₹${specs.estimatedPrice}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="background-color: #1e293b; padding: 12px; text-align: center; font-size: 13px; color: #94a3b8; border-top: 1px solid #334155;">
+                    <a href="${fileUrl}" style="color: #60a5fa; text-decoration: none; font-weight: bold;">Download ${file.originalname}</a> • ${(file.size / 1024 / 1024).toFixed(2)} MB
+                </div>
+            </div>
+        `;
+
+        // ----------------------------------------------------
+        // E. Send Admin Email
+        // ----------------------------------------------------
+        try {
+            await transporter.sendMail({
+                from: `"ProtoDesign System" <${process.env.EMAIL_USER}>`,
+                to: 'protodesign137@gmail.com', // Your Admin Email
+                subject: `New Request: ${file.originalname} - ₹${specs.estimatedPrice}`,
+                html: adminHtml,
+                // Optional: Attach file if small enough (<10MB), otherwise rely on link
+                attachments: file.size < 10 * 1024 * 1024 ? [{
                     filename: file.originalname,
                     content: file.buffer
-                }
-            ]
-        };
+                }] : []
+            });
+            console.log('Admin email sent');
+        } catch (err) {
+            console.error('Admin Email Failed:', err);
+        }
 
-        await transporter.sendMail(mailOptions);
-        res.json({ success: true });
+        // ----------------------------------------------------
+        // F. Send Customer Confirmation Email
+        // ----------------------------------------------------
+        try {
+            const customerHtml = `
+                <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+                    <h2 style="color: #2563eb;">🚀 We received your request!</h2>
+                    <p>Hi there,</p>
+                    <p>Thank you for submitting your model <strong>${file.originalname}</strong>.</p>
+                    
+                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <p><strong>Estimated Price:</strong> ₹${specs.estimatedPrice}</p>
+                        <p><strong>Next Steps:</strong> Our engineers are reviewing the file for printability. We will contact you soon.</p>
+                    </div>
+
+                    <p>Best regards,<br><strong>The ProtoDesign Team</strong></p>
+                </div>
+            `;
+
+            await transporter.sendMail({
+                from: `"ProtoDesign" <${process.env.EMAIL_USER}>`,
+                to: email,
+                subject: `Order Received: ${file.originalname}`,
+                html: customerHtml
+            });
+            console.log('Customer email sent');
+        } catch (err) {
+            console.error('Customer Email Failed:', err);
+        }
+
+        res.json({ success: true, message: "Quote requested successfully" });
 
     } catch (error) {
-        console.error('Quote Email Error:', error);
-        res.status(500).json({ error: 'Failed to send quote' });
+        console.error('Quote Process Error:', error);
+        res.status(500).json({ error: 'Failed to process quote' });
+    }
+});
+
+// GET /api/quotes/admin/all
+router.get('/admin/all', async (req, res) => {
+    try {
+        const quotes = await db.any('SELECT * FROM quotes ORDER BY created_at DESC');
+        res.json(quotes);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// PUT /api/quotes/:id/status
+router.put('/:id/status', async (req, res) => {
+    try {
+        const { status } = req.body;
+        await db.none('UPDATE quotes SET status = $1 WHERE id = $2', [status, req.params.id]);
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

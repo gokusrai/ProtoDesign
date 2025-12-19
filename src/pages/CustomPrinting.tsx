@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STLViewer } from "@/components/STLViewer";
 import { useDropzone } from "react-dropzone";
-import { Upload, Check, Loader2, FileBox, Ruler, Clock, RotateCw, Scale, Trash2, FileText } from "lucide-react";
+import { Upload, Check, Loader2, FileBox, Ruler, Clock, RotateCw, Scale, Trash2, FileText, Info } from "lucide-react";
 import { toast } from "sonner";
 import { apiService } from "@/services/api.service";
 import { formatINR } from "@/lib/currency";
@@ -19,25 +19,44 @@ const PRINTER_QUALITIES = [
     { id: "0.1-high", name: "0.1 mm High Detail", multiplier: 2.0 },
 ];
 
+// Added 'density' (g/cm3) for weight calculation
 const MATERIALS = [
-    { id: "abs", name: "ABS", colors: ["Black", "White", "Grey", "Red", "Blue"] },
-    { id: "pla", name: "PLA", colors: ["Black", "White", "Grey", "Yellow", "Green"] },
-    { id: "petg", name: "PETG", colors: ["Translucent", "Black"] },
+    { id: "abs", name: "ABS", density: 1.04, colors: ["Black", "White", "Grey", "Red", "Blue"] },
+    { id: "pla", name: "PLA", density: 1.24, colors: ["Black", "White", "Grey", "Yellow", "Green"] },
+    { id: "petg", name: "PETG", density: 1.27, colors: ["Translucent", "Black"] },
 ];
 
 const INFILLS = [20, 30, 40, 50, 60, 70, 80, 90, 100];
 
+// Helper to map display names to CSS colors for the viewer
+const getColorHex = (name: string) => {
+    const map: Record<string, string> = {
+        "Black": "#1a1a1a",
+        "White": "#f5f5f5",
+        "Grey": "#808080",
+        "Red": "#ef4444",
+        "Blue": "#3b82f6",
+        "Yellow": "#eab308",
+        "Green": "#22c55e",
+        "Translucent": "#e5e7eb", // Light grey for translucent
+    };
+    return map[name] || "#10b981"; // Default green if not found
+};
+
 export default function CustomPrinting() {
     // --- STATE ---
     const [file, setFile] = useState<File | null>(null);
-    const [rotation, setRotation] = useState({ x: 0, y: 0 });
+
+    // Rotation State (X, Y, Z degrees)
+    const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
 
     const [modelStats, setModelStats] = useState({
         volume: 0,
-        dimensions: { x: 0, y: 0, z: 0 }
+        dimensions: { x: 0, y: 0, z: 0 },
+        triangles: 0 // Added triangle count
     });
 
-    const [scale, setScale] = useState(1);
+    const [scale, setScale] = useState(1); // 1 = 100%
 
     // Selections
     const [quality, setQuality] = useState(PRINTER_QUALITIES[0]);
@@ -51,12 +70,11 @@ export default function CustomPrinting() {
 
     // --- ACTIONS ---
 
-    // ✅ NEW: Handle File Removal
     const handleRemoveFile = () => {
         setFile(null);
-        setRotation({ x: 0, y: 0 });
+        setRotation({ x: 0, y: 0, z: 0 });
         setScale(1);
-        setModelStats({ volume: 0, dimensions: { x: 0, y: 0, z: 0 } });
+        setModelStats({ volume: 0, dimensions: { x: 0, y: 0, z: 0 }, triangles: 0 });
         toast.info("Model removed");
     };
 
@@ -78,8 +96,11 @@ export default function CustomPrinting() {
             material: `${material.name} - ${color}`,
             infill: `${infill}%`,
             originalStats: modelStats,
+            polygonCount: modelStats.triangles,
+            estimatedWeight: calculateWeight(),
             printDimensions: printDims,
             scale: `${(scale * 100).toFixed(0)}%`,
+            rotation: `X:${rotation.x} Y:${rotation.y} Z:${rotation.z}`,
             estimatedPrice: calculatePrice(),
             estimatedTime: calculateTime()
         });
@@ -118,7 +139,17 @@ export default function CustomPrinting() {
         }
     };
 
-    // --- LOGIC: PRICING ---
+    // --- LOGIC: PRICING & WEIGHT ---
+
+    // Weight = Volume (cm3) * Scale^3 * Density (g/cm3) * Infill Factor (approx)
+    const calculateWeight = () => {
+        if (!modelStats.volume) return "0 g";
+        const scaledVolume = modelStats.volume * Math.pow(scale, 3);
+        const infillFactor = 0.3 + (infill / 100 * 0.7); // Rough approximation: Shell is solid, infill varies
+        const weight = scaledVolume * material.density * infillFactor;
+        return `${weight.toFixed(1)} g`;
+    };
+
     const calculatePrice = () => {
         if (!modelStats.volume) return 0;
         const scaledVolume = modelStats.volume * Math.pow(scale, 3);
@@ -137,13 +168,16 @@ export default function CustomPrinting() {
     };
 
     const onDrop = useCallback((files: File[]) => {
-        if(files.length) setFile(files[0]);
+        if(files.length) {
+            setFile(files[0]);
+            setRotation({ x: 0, y: 0, z: 0 }); // Reset rotation on new file
+        }
     }, []);
     const { getRootProps, getInputProps } = useDropzone({
         onDrop,
         accept: {'model/stl':['.stl'], 'model/obj':['.obj']},
         maxFiles: 1,
-        disabled: !!file // Disable dropzone if file exists
+        disabled: !!file
     });
 
     if (isSuccess) {
@@ -178,7 +212,7 @@ export default function CustomPrinting() {
                     <div className="lg:col-span-7 lg:sticky lg:top-24 space-y-4">
                         <Card className="overflow-hidden border-2 border-dashed border-border/50 shadow-sm">
 
-                            {/* ✅ NEW: File Header Bar */}
+                            {/* File Header Bar */}
                             {file && (
                                 <div className="bg-white border-b p-3 flex justify-between items-center px-4">
                                     <div className="flex items-center gap-2 overflow-hidden">
@@ -204,8 +238,9 @@ export default function CustomPrinting() {
                             <div className="h-[500px] w-full bg-slate-900 relative">
                                 <STLViewer
                                     file={file}
-                                    rotationX={rotation.x}
-                                    rotationY={rotation.y}
+                                    scale={scale} // Pass dynamic scale
+                                    rotation={rotation} // Pass dynamic rotation object
+                                    color={getColorHex(color)} // Pass dynamic color
                                     onStatsCalculated={setModelStats}
                                 />
                                 {!file && (
@@ -220,32 +255,41 @@ export default function CustomPrinting() {
                             </div>
                         </Card>
 
-                        {/* Rotation Inputs */}
+                        {/* Rotation Inputs (Merged from custom.tsx) */}
                         {file && (
-                            <div className="flex gap-4 p-4 bg-white rounded-lg border shadow-sm items-center">
-                                <RotateCw className="w-5 h-5 text-muted-foreground" />
-                                <span className="font-medium text-sm">Orientation:</span>
-
-                                <div className="flex items-center gap-2">
-                                    <Label className="text-xs">X Axis</Label>
-                                    <Input
-                                        type="number"
-                                        className="w-20 h-8"
-                                        value={rotation.x}
-                                        onChange={e => setRotation(p => ({...p, x: Number(e.target.value)}))}
-                                    />
-                                    <span className="text-sm text-muted-foreground">°</span>
+                            <div className="flex flex-col gap-3 p-4 bg-white rounded-lg border shadow-sm">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                    <RotateCw className="w-4 h-4 text-muted-foreground" />
+                                    Model Orientation (Degrees)
                                 </div>
-
-                                <div className="flex items-center gap-2">
-                                    <Label className="text-xs">Y Axis</Label>
-                                    <Input
-                                        type="number"
-                                        className="w-20 h-8"
-                                        value={rotation.y}
-                                        onChange={e => setRotation(p => ({...p, y: Number(e.target.value)}))}
-                                    />
-                                    <span className="text-sm text-muted-foreground">°</span>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <Label className="text-xs w-4">X</Label>
+                                        <Input
+                                            type="number"
+                                            className="h-8"
+                                            value={rotation.x}
+                                            onChange={e => setRotation(p => ({...p, x: Number(e.target.value)}))}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Label className="text-xs w-4">Y</Label>
+                                        <Input
+                                            type="number"
+                                            className="h-8"
+                                            value={rotation.y}
+                                            onChange={e => setRotation(p => ({...p, y: Number(e.target.value)}))}
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Label className="text-xs w-4">Z</Label>
+                                        <Input
+                                            type="number"
+                                            className="h-8"
+                                            value={rotation.z}
+                                            onChange={e => setRotation(p => ({...p, z: Number(e.target.value)}))}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -253,11 +297,11 @@ export default function CustomPrinting() {
 
                     {/* RIGHT COLUMN: Configuration Form */}
                     <div className="lg:col-span-5 space-y-6">
-                        {/* (Rest of the code matches the previous Single Page implementation) */}
+
                         <Card>
                             <CardHeader className="pb-3">
                                 <CardTitle className="text-lg flex items-center gap-2">
-                                    <Ruler className="w-5 h-5 text-primary" /> Dimensions & Scale
+                                    <Info className="w-5 h-5 text-primary" /> Model Stats
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
@@ -269,9 +313,21 @@ export default function CustomPrinting() {
                                         </span>
                                     </div>
                                     <div>
+                                        <span className="text-muted-foreground block text-xs mb-1">Triangle Count</span>
+                                        <span className="font-mono font-medium">
+                                            {modelStats.triangles.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div>
                                         <span className="text-muted-foreground block text-xs mb-1">Material Volume</span>
                                         <span className="font-mono font-medium">
                                             {(modelStats.volume * Math.pow(scale, 3)).toFixed(2)} cm³
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground block text-xs mb-1">Est. Weight</span>
+                                        <span className="font-mono font-medium">
+                                            {calculateWeight()}
                                         </span>
                                     </div>
                                 </div>
@@ -315,16 +371,26 @@ export default function CustomPrinting() {
                                         <Scale className="w-4 h-4 text-muted-foreground" />
                                         <Input
                                             type="number"
-                                            step="0.1"
-                                            value={parseFloat(scale.toFixed(2))}
+                                            step="1"
+                                            min="10"
+                                            value={parseFloat((scale * 100).toFixed(0))}
                                             onChange={e => {
                                                 const val = parseFloat(e.target.value);
-                                                if (val > 0) setScale(val);
+                                                if (val > 0) setScale(val / 100);
                                             }}
                                             className="w-24"
                                         />
-                                        <span className="text-sm font-medium">x Original</span>
+                                        <span className="text-sm font-medium">%</span>
                                     </div>
+                                    {/* Infinite Slider */}
+                                    <input
+                                        type="range"
+                                        min="10"
+                                        max="500" // Goes up to 500% now
+                                        value={scale * 100}
+                                        onChange={(e) => setScale(Number(e.target.value) / 100)}
+                                        className="w-full accent-primary h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-2"
+                                    />
                                 </div>
                             </CardContent>
                         </Card>
@@ -372,7 +438,10 @@ export default function CustomPrinting() {
                                                     className={`px-3 py-2 rounded border cursor-pointer text-sm transition-colors ${color === c ? 'bg-muted border-foreground' : 'hover:bg-muted/50'}`}
                                                 >
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`w-3 h-3 rounded-full border shadow-sm`} style={{ backgroundColor: c.toLowerCase() }} />
+                                                        <div
+                                                            className={`w-3 h-3 rounded-full border shadow-sm`}
+                                                            style={{ backgroundColor: getColorHex(c) }}
+                                                        />
                                                         {c}
                                                     </div>
                                                 </div>

@@ -7,51 +7,75 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiService } from '@/services/api.service';
 import { toast } from 'sonner';
-import { Loader2, Eye, EyeOff } from 'lucide-react'; // ✅ Import Eye icons
+import { Loader2, Eye, EyeOff } from 'lucide-react';
+import { GoogleLogin, CredentialResponse } from '@react-oauth/google';
 
-const Auth = () => {
+export default function Auth() {
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('login');
 
-    // ✅ Visibility States
+    // Visibility States
     const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [showSignupPassword, setShowSignupPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    // ✅ Track failed attempts
-    const [loginAttempts, setLoginAttempts] = useState(0);
+    const [loginData, setLoginData] = useState({ email: '', password: '' });
+    const [signupData, setSignupData] = useState({ fullName: '', email: '', password: '', confirmPassword: '' });
 
-    const [loginData, setLoginData] = useState({
-        email: '',
-        password: '',
-    });
+    // --- GOOGLE LOGIN HANDLER (NEW) ---
+    const handleGoogleSuccess = async (credentialResponse: CredentialResponse) => {
+        try {
+            if (!credentialResponse.credential) {
+                toast.error("Google login failed. No credential received.");
+                return;
+            }
 
-    const [signupData, setSignupData] = useState({
-        fullName: '',
-        email: '',
-        password: '',
-        confirmPassword: '',
-    });
+            setIsLoading(true);
+            // Send token to backend
+            const response = await apiService.loginWithGoogle(credentialResponse.credential);
 
-    const handleLoginChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setLoginData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    };
+            // Save session
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
 
-    const handleSignupChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setSignupData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+            // Notify & Redirect
+            toast.success(`Welcome back, ${response.user.full_name}!`);
+
+            // Check for redirect (e.g., from Cart)
+            const redirectUrl = localStorage.getItem('redirectAfterLogin');
+            if (redirectUrl) {
+                localStorage.removeItem('redirectAfterLogin');
+                navigate(redirectUrl);
+            } else {
+                navigate(response.user.role === 'admin' ? '/admin' : '/');
+            }
+
+        } catch (error: any) {
+            console.error("Google Auth Error:", error);
+            toast.error(error.message || "Google authentication failed");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-
         try {
-            await apiService.login(loginData.email, loginData.password);
+            const response = await apiService.login(loginData.email, loginData.password);
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
             toast.success('Logged in successfully');
-            navigate('/'); // ✅ CHANGED from '/shop' to '/'
+
+            const redirectUrl = localStorage.getItem('redirectAfterLogin');
+            if (redirectUrl) {
+                localStorage.removeItem('redirectAfterLogin');
+                navigate(redirectUrl);
+            } else {
+                navigate(response.user.role === 'admin' ? '/admin' : '/');
+            }
         } catch (error: any) {
-            setLoginAttempts(prev => prev + 1);
             toast.error(error.message || 'Login failed');
         } finally {
             setIsLoading(false);
@@ -60,42 +84,32 @@ const Auth = () => {
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
-
-        if (signupData.password.length < 8) { // ✅ CHECK 8 CHARS
-            toast.error("Password must be at least 8 characters");
-            return;
-        }
-        
         if (signupData.password !== signupData.confirmPassword) {
             toast.error("Passwords don't match");
             return;
         }
-
         setIsLoading(true);
-
         try {
-            await apiService.signup(signupData.email, signupData.password, signupData.fullName);
+            const response = await apiService.register(signupData.fullName, signupData.email, signupData.password);
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
             toast.success('Account created successfully');
-            navigate('/'); // ✅ CHANGED from '/shop' to '/'
+            navigate('/');
         } catch (error: any) {
-            toast.error(error.message || 'Signup failed');
+            toast.error(error.message || 'Registration failed');
         } finally {
             setIsLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen pt-24 pb-16 bg-gradient-subtle flex items-center justify-center px-4">
-            <Card className="w-full max-w-md">
-                <Tabs defaultValue="login" className="w-full" onValueChange={setActiveTab}>
+        <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
+            <Card className="w-full max-w-md shadow-lg">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                     <CardHeader>
-                        <CardTitle className="text-2xl text-center">
-                            {activeTab === 'login' ? 'Welcome Back' : 'Create Account'}
-                        </CardTitle>
+                        <CardTitle className="text-2xl text-center">ProtoDesign</CardTitle>
                         <CardDescription className="text-center">
-                            {activeTab === 'login'
-                                ? 'Enter your credentials to access your account'
-                                : 'Sign up to start your 3D printing journey'}
+                            Login or create an account to manage your orders
                         </CardDescription>
                         <TabsList className="grid w-full grid-cols-2 mt-4">
                             <TabsTrigger value="login">Login</TabsTrigger>
@@ -103,67 +117,43 @@ const Auth = () => {
                         </TabsList>
                     </CardHeader>
 
-                    <CardContent>
+                    <CardContent className="space-y-4">
                         <TabsContent value="login">
                             <form onSubmit={handleLogin} className="space-y-4">
                                 <div className="space-y-2">
-                                    <Label htmlFor="login-email">Email</Label>
+                                    <Label htmlFor="email">Email</Label>
                                     <Input
-                                        id="login-email"
-                                        name="email"
+                                        id="email"
                                         type="email"
-                                        placeholder="name@example.com"
-                                        value={loginData.email}
-                                        onChange={handleLoginChange}
+                                        placeholder="m@example.com"
                                         required
+                                        value={loginData.email}
+                                        onChange={(e) => setLoginData({...loginData, email: e.target.value})}
                                     />
                                 </div>
-
-                                {/* ✅ Login Password with Toggle */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="login-password">Password</Label>
+                                    <div className="flex items-center justify-between">
+                                        <Label htmlFor="password">Password</Label>
+                                        <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                                            Forgot password?
+                                        </Link>
+                                    </div>
                                     <div className="relative">
                                         <Input
-                                            id="login-password"
-                                            name="password"
+                                            id="password"
                                             type={showLoginPassword ? "text" : "password"}
-                                            value={loginData.password}
-                                            onChange={handleLoginChange}
                                             required
-                                            className="pr-10"
+                                            value={loginData.password}
+                                            onChange={(e) => setLoginData({...loginData, password: e.target.value})}
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowLoginPassword(!showLoginPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                        >
+                                        <button type="button" onClick={() => setShowLoginPassword(!showLoginPassword)} className="absolute right-3 top-2.5 text-gray-500">
                                             {showLoginPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
                                 </div>
-
                                 <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Logging in...
-                                        </>
-                                    ) : (
-                                        'Login'
-                                    )}
+                                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Login'}
                                 </Button>
-
-                                {/* ✅ Conditional Forgot Password Link */}
-                                {loginAttempts > 0 && (
-                                    <div className="text-center mt-2">
-                                        <Link
-                                            to="/forgot-password"
-                                            className="text-sm text-muted-foreground hover:text-primary underline transition-colors"
-                                        >
-                                            Forgot your password?
-                                        </Link>
-                                    </div>
-                                )}
                             </form>
                         </TabsContent>
 
@@ -173,89 +163,78 @@ const Auth = () => {
                                     <Label htmlFor="fullName">Full Name</Label>
                                     <Input
                                         id="fullName"
-                                        name="fullName"
-                                        placeholder="John Doe"
-                                        value={signupData.fullName}
-                                        onChange={handleSignupChange}
                                         required
+                                        value={signupData.fullName}
+                                        onChange={(e) => setSignupData({...signupData, fullName: e.target.value})}
                                     />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="signup-email">Email</Label>
                                     <Input
                                         id="signup-email"
-                                        name="email"
                                         type="email"
-                                        placeholder="name@example.com"
-                                        value={signupData.email}
-                                        onChange={handleSignupChange}
                                         required
+                                        value={signupData.email}
+                                        onChange={(e) => setSignupData({...signupData, email: e.target.value})}
                                     />
                                 </div>
-
-                                {/* ✅ Signup Password with Toggle */}
                                 <div className="space-y-2">
                                     <Label htmlFor="signup-password">Password</Label>
                                     <div className="relative">
                                         <Input
                                             id="signup-password"
-                                            name="password"
                                             type={showSignupPassword ? "text" : "password"}
-                                            value={signupData.password}
-                                            onChange={handleSignupChange}
                                             required
-                                            className="pr-10"
+                                            value={signupData.password}
+                                            onChange={(e) => setSignupData({...signupData, password: e.target.value})}
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowSignupPassword(!showSignupPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                        >
+                                        <button type="button" onClick={() => setShowSignupPassword(!showSignupPassword)} className="absolute right-3 top-2.5 text-gray-500">
                                             {showSignupPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
                                 </div>
-
-                                {/* ✅ Confirm Password with Toggle */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                    <Label htmlFor="confirm-password">Confirm Password</Label>
                                     <div className="relative">
                                         <Input
-                                            id="confirmPassword"
-                                            name="confirmPassword"
+                                            id="confirm-password"
                                             type={showConfirmPassword ? "text" : "password"}
-                                            value={signupData.confirmPassword}
-                                            onChange={handleSignupChange}
                                             required
-                                            className="pr-10"
+                                            value={signupData.confirmPassword}
+                                            onChange={(e) => setSignupData({...signupData, confirmPassword: e.target.value})}
                                         />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                        >
+                                        <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-3 top-2.5 text-gray-500">
                                             {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                                         </button>
                                     </div>
                                 </div>
-
                                 <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Creating account...
-                                        </>
-                                    ) : (
-                                        'Sign Up'
-                                    )}
+                                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Account'}
                                 </Button>
                             </form>
                         </TabsContent>
                     </CardContent>
                 </Tabs>
+
+                {/* --- GOOGLE LOGIN BUTTON --- */}
+                <div className="px-6 pb-6">
+                    <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                        <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-muted-foreground">Or continue with</span></div>
+                    </div>
+
+                    <div className="flex justify-center">
+                        <GoogleLogin
+                            onSuccess={handleGoogleSuccess}
+                            onError={() => toast.error('Google login failed')}
+                            useOneTap={false}
+                            theme="outline"
+                            size="large"
+                            width="400"
+                        />
+                    </div>
+                </div>
             </Card>
         </div>
     );
 };
-
-export default Auth;

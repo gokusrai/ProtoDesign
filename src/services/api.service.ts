@@ -29,7 +29,7 @@ class ApiService {
         return headers;
     }
 
-    private async request(
+    public async request(
         endpoint: string,
         options: RequestOptions = {}
     ): Promise<any> {
@@ -91,6 +91,8 @@ class ApiService {
     }
 
     // ========== Auth Routes ==========
+
+    // Core signup method matching Backend expectation
     async signup(email: string, password: string, fullName: string) {
         const data = await this.request("/auth/signup", {
             method: "POST",
@@ -105,10 +107,31 @@ class ApiService {
         return data;
     }
 
+    // ✅ FIXED: Alias 'register' to match Auth.tsx usage
+    // Auth.tsx passes (fullName, email, password), so we map it correctly here.
+    async register(fullName: string, email: string, password: string) {
+        return this.signup(email, password, fullName);
+    }
+
     async login(email: string, password: string) {
         const data = await this.request("/auth/login", {
             method: "POST",
             body: JSON.stringify({ email, password }),
+            skipAuth: true,
+        });
+
+        if (data.token) {
+            this.setToken(data.token);
+        }
+
+        return data;
+    }
+
+    // ✅ ADDED: Google Login Support
+    async loginWithGoogle(token: string) {
+        const data = await this.request("/auth/google", {
+            method: "POST",
+            body: JSON.stringify({ token }),
             skipAuth: true,
         });
 
@@ -129,7 +152,6 @@ class ApiService {
 
     // ========== Products Routes ==========
 
-    // ✅ FIXED: Now accepts 3 arguments to match ProductDetail.tsx and support sub-categories
     async getProducts(category?: string | null, subCategory?: string | null, search?: string | null) {
         const params = new URLSearchParams();
 
@@ -145,46 +167,21 @@ class ApiService {
         return this.request(`/products/${id}`, { method: "GET" });
     }
 
-    /**
-     * Create product.
-     * Accepts either a plain object (will be JSON-stringified) or a FormData (multipart upload).
-     */
     async createProduct(productData: any | FormData) {
         const isForm = productData instanceof FormData;
-
         return this.request("/products", {
             method: "POST",
             body: isForm ? productData : JSON.stringify(productData),
         });
     }
 
-    /**
-     * Backwards-compatible alias for explicit FormData uploads.
-     */
-    async createProductWithImage(formData: FormData) {
-        return this.createProduct(formData);
-    }
-
-    /**
-     * Update product.
-     * Accepts either a plain object (JSON) or a FormData (multipart upload to replace image).
-     */
     async updateProduct(id: string, productData: any | FormData) {
         const isForm = productData instanceof FormData;
-
         return this.request(`/products/${id}`, {
             method: "PUT",
             body: isForm ? productData : JSON.stringify(productData),
         });
     }
-
-    /**
-     * Backwards-compatible alias for explicit FormData uploads.
-     */
-    async updateProductWithImage(productId: string, formData: FormData) {
-        return this.updateProduct(productId, formData);
-    }
-
 
     async deleteProduct(id: string) {
         return this.request(`/products/${id}`, { method: "DELETE" });
@@ -238,12 +235,10 @@ class ApiService {
                 totalAmount,
                 shippingAddress,
                 paymentGateway,
-                shippingAmount // ✅ Sending this to backend
+                shippingAmount
             }),
         });
     }
-
-    // ========== CUSTOMER ORDER ACTIONS ==========
 
     async cancelOrder(orderId: string) {
         return this.request(`/orders/${orderId}/cancel`, { method: "POST" });
@@ -267,7 +262,7 @@ class ApiService {
         return this.request("/orders/admin/all", { method: "GET" });
     }
 
-    // ===== REVIEWS =====
+    // ===== REVIEWS & LIKES =====
     async getProductReviews(productId: string) {
         return this.request(`/products/${productId}/reviews`, { method: "GET" });
     }
@@ -279,7 +274,6 @@ class ApiService {
         });
     }
 
-    // ===== LIKE METHODS =====
     async isProductLiked(productId: string) {
         return this.request(`/products/${productId}/likes`);
     }
@@ -309,16 +303,22 @@ class ApiService {
     }
 
     async sendQuoteRequest(formData: FormData) {
-        // Note: When sending FormData, DO NOT set Content-Type header manually
-        // The browser sets it automatically with the boundary
         return this.request("/quotes/request", {
             method: "POST",
             body: formData,
-            // Custom option to tell our request helper NOT to enforce JSON
-            // You might need to adjust your buildHeaders method to handle FormData check
         });
     }
 
+    async getAllQuotes() {
+        return this.request('/quotes/admin/all');
+    }
+
+    async updateQuoteStatus(id: string, status: string) {
+        return this.request(`/quotes/${id}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+        });
+    }
 }
 
 export const apiService = new ApiService();

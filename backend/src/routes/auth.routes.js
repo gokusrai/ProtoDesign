@@ -178,4 +178,15 @@ router.post('/reset-password', async (req, res, next) => {
     }
 });
 
+// Add this route
+router.post('/google', async (req, res) => {
+    try {
+        const { token } = req.body;
+        const result = await authService.loginWithGoogle(token);
+        res.json(result);
+    } catch (error) {
+        res.status(401).json({ error: error.message });
+    }
+});
+
 export default router;
