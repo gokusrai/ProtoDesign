@@ -10,9 +10,6 @@
     "start": "node dist/app.js",
     "db:setup": "psql -U postgres -f migrations/000_create_database.sql"
   },
-  "keywords": [],
-  "author": "Your Name",
-  "license": "ISC",
   "dependencies": {
     "@react-oauth/google": "^0.12.2",
     "bcrypt": "^6.0.0",
@@ -28,19 +25,18 @@
     "nodemailer": "^7.0.11",
     "pg": "^8.11.0",
     "pg-promise": "^12.3.0",
-    "streamifier": "^0.1.1"
-  },
-  "devDependencies": {
-    "@types/bcryptjs": "REMOVED",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.5",
-    "@types/jsonwebtoken": "^9.0.10",
+    "streamifier": "^0.1.1",
+    "typescript": "^5.2.0",
+    "tsx": "^4.19.1",
+    "ts-node": "^10.9.0",
+    "cross-env": "^7.0.3",
     "@types/node": "^24.10.1",
+    "@types/express": "^5.0.5",
+    "@types/cors": "^2.8.19",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/pg": "^8.15.6",
     "@types/pg-promise": "^0.0.28",
-    "cross-env": "^7.0.3",
-    "ts-node": "^10.9.0",
-    "tsx": "^4.19.1",
-    "typescript": "^5.2.0"
-  }
+    "@types/bcryptjs": "^2.4.6"
+  },
+  "devDependencies": {}
 }
