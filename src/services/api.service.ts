@@ -1,6 +1,7 @@
 // src/services/api.service.ts
 
-const API_URL = "/api";
+// If VITE_API_URL is set (Cloud), use it. Otherwise use /api (Local)
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 interface RequestOptions extends RequestInit {
     skipAuth?: boolean;

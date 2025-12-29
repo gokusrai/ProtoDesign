@@ -8,3 +8,8 @@ CREATE DATABASE protodesign
 
 -- Grant all privileges to your app user
 GRANT ALL PRIVILEGES ON DATABASE protodesign TO protodesign_user;
+
+
+
+
+-- npg_QU2hHo3YxkPA

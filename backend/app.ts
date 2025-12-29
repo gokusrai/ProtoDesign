@@ -30,12 +30,10 @@ app.use(helmet());
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:8080',
-    'http://localhost:3000',
-    'http://127.0.0.1:8080',
-    'http://192.168.29.39:3000',
-    'http://192.168.29.39:5173',
-    'http://192.168.29.39:8080', // ✅ ADDED THIS
-];
+    process.env.FRONTEND_URL,  // <--- Crucial for Vercel
+    process.env.CLIENT_URL,
+].filter(Boolean);             // Removes undefined values
+
 
 app.use(cors({
     origin: (origin, callback) => {

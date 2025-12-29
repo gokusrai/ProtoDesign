@@ -1,43 +1,22 @@
-import pgPromise from 'pg-promise';
-import dotenv from 'dotenv';
+import pg from 'pg';
+const { Pool } = pg;
 
-// Load environment variables
-dotenv.config();
-
-// Initialize pg-promise
-const pgp = pgPromise({
-    receive(data) {
-        // Convert snake_case to camelCase
-        for (const prop in data) {
-            const camel = prop.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
-            if (prop !== camel) {
-                data[camel] = data[prop];
-                delete data[prop];
+const pool = new Pool(
+    process.env.DATABASE_URL
+        ? {
+            connectionString: process.env.DATABASE_URL,
+            ssl: {
+                rejectUnauthorized: false // Required for Neon/Railway
             }
         }
-    }
-});
+        : {
+            // Fallback for local development
+            host: process.env.DB_HOST,
+            port: process.env.DB_PORT,
+            user: process.env.DB_USER,
+            password: process.env.DB_PASSWORD,
+            database: process.env.DB_NAME,
+        }
+);
 
-// Database connection configuration
-const config = {
-    host: 'localhost',
-    port: 5432,
-    database: 'protodesign',
-    user: 'protodesign_user',
-    password: '0000'
-};
-
-// Create database instance
-const db = pgp(config);
-
-// Test connection
-db.connect()
-    .then((obj) => {
-        console.log('✅ Database connection successful');
-        obj.done();
-    })
-    .catch((error) => {
-        console.error('❌ Database connection failed:', error.message);
-    });
-
-export default db;
+export default pool;
