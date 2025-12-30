@@ -87,8 +87,9 @@ router.get('/:id', async (req, res) => {
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
         product.product_images = images;
 
+        // ✅ FIXED: Aliased full_name as 'user' to match Frontend Interface
         const reviews = await db.any(`
-            SELECT r.*, u.full_name as user_name 
+            SELECT r.*, u.full_name as user 
             FROM reviews r 
             LEFT JOIN users u ON r.user_id = u.id 
             WHERE r.product_id = $1 
@@ -104,7 +105,14 @@ router.get('/:id', async (req, res) => {
 
 router.get('/:id/reviews', async (req, res) => {
     try {
-        const reviews = await db.any('SELECT r.*, u.full_name as user_name, u.avatar_url FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.product_id = $1 ORDER BY r.created_at DESC', [req.params.id]);
+        // ✅ FIXED: Aliased full_name as 'user' here too
+        const reviews = await db.any(`
+            SELECT r.*, u.full_name as user, u.avatar_url 
+            FROM reviews r 
+            JOIN users u ON r.user_id = u.id 
+            WHERE r.product_id = $1 
+            ORDER BY r.created_at DESC
+        `, [req.params.id]);
         res.json(reviews);
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
@@ -149,7 +157,7 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
-        // ✅ ADDED short_description to INSERT
+        // ✅ ADDED short_description
         const product = await db.one(
             `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
@@ -180,7 +188,7 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete } = req.body;
 
-        // ✅ ADDED short_description to UPDATE
+        // ✅ ADDED short_description
         await db.none(
             `UPDATE products 
              SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, updated_at=NOW()
