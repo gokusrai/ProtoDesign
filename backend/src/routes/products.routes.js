@@ -22,16 +22,19 @@ const upload = multer({
 // Middleware: Check Admin Role
 const isAdmin = async (req, res, next) => {
     try {
+        // ✅ CORRECT: Check the 'user_roles' table (Source of Truth)
         const result = await db.oneOrNone('SELECT role FROM user_roles WHERE user_id = $1', [req.userId]);
-        // Also check "users" table directly if role is stored there
-        const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
 
-        if ((result && result.role === 'admin') || (user && user.role === 'admin')) {
+        // ❌ REMOVED: The crashing query (The 'users' table has no 'role' column)
+        // const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
+
+        if (result && result.role === 'admin') {
             next();
         } else {
             res.status(403).json({ error: 'Admin access required' });
         }
     } catch (error) {
+        console.error("❌ Admin Check Error:", error); // This helps you debug in Render Logs
         res.status(500).json({ error: 'Failed to verify admin privileges' });
     }
 };
@@ -43,7 +46,7 @@ const isAdmin = async (req, res, next) => {
 // GET All Products (with filters)
 router.get('/', async (req, res) => {
     try {
-        const { category, sub_category, search, show_archived } = req.query; // Add show_archived optional param
+        const { category, sub_category, search, show_archived } = req.query;
 
         let query = 'SELECT * FROM products WHERE 1=1';
         let params = [];
@@ -60,7 +63,6 @@ router.get('/', async (req, res) => {
             paramCount++;
         }
 
-        // Simple text match for sub-category/search inside name or description
         if (sub_category && sub_category !== 'all') {
             query += ` AND (description ILIKE $${paramCount} OR name ILIKE $${paramCount})`;
             params.push(`%${sub_category}%`);
@@ -97,7 +99,6 @@ router.get('/:id', async (req, res) => {
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
         product.images = images;
 
-        // Get reviews
         const reviews = await db.any(`
             SELECT r.*, u.full_name as user_name 
             FROM reviews r 
@@ -133,7 +134,7 @@ router.get('/:id/reviews', async (req, res) => {
 // PROTECTED ROUTES (Auth Required)
 // ==========================================
 
-// Add Review (Any logged in user)
+// Add Review
 router.post('/:id/reviews', authMiddleware, async (req, res) => {
     try {
         const { rating, comment } = req.body;
@@ -142,7 +143,6 @@ router.post('/:id/reviews', authMiddleware, async (req, res) => {
             [req.params.id, req.userId, rating, comment]
         );
 
-        // Update average rating
         await db.none(`
             UPDATE products SET 
                 average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1),
@@ -159,16 +159,13 @@ router.post('/:id/reviews', authMiddleware, async (req, res) => {
 // Like/Unlike Product
 router.post('/:id/like', authMiddleware, async (req, res) => {
     try {
-        // Check if already liked
         const existing = await db.oneOrNone('SELECT * FROM product_likes WHERE product_id = $1 AND user_id = $2', [req.params.id, req.userId]);
 
         if (existing) {
-            // Unlike
             await db.none('DELETE FROM product_likes WHERE product_id = $1 AND user_id = $2', [req.params.id, req.userId]);
             await db.none('UPDATE products SET likes_count = likes_count - 1 WHERE id = $1', [req.params.id]);
             res.json({ liked: false });
         } else {
-            // Like
             await db.none('INSERT INTO product_likes (product_id, user_id) VALUES ($1, $2)', [req.params.id, req.userId]);
             await db.none('UPDATE products SET likes_count = likes_count + 1 WHERE id = $1', [req.params.id]);
             res.json({ liked: true });
@@ -179,9 +176,6 @@ router.post('/:id/like', authMiddleware, async (req, res) => {
 });
 
 router.get('/:id/likes', async (req, res) => {
-    // Only return true/false if user is logged in via header, else false
-    // Since this is a GET route potentially called by guests, we handle auth manually or skip
-    // For simplicity, let's say frontend handles the visual state based on local logic or protected call
     res.json({ message: "Use POST /like to toggle" });
 });
 
@@ -198,12 +192,10 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
         let mainImageUrl = null;
         let videoUrl = null;
 
-        // Upload Video if exists
         if (req.files['video']) {
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
-        // Upload Main Image (first one)
         if (req.files['images'] && req.files['images'].length > 0) {
             mainImageUrl = await storageService.uploadFile(req.files['images'][0], 'products');
         }
@@ -214,7 +206,6 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             [name, description, price, category, stock, specifications, mainImageUrl, videoUrl]
         );
 
-        // Save All Images to product_images table
         if (req.files['images']) {
             for (let i = 0; i < req.files['images'].length; i++) {
                 const url = (i === 0 && mainImageUrl) ? mainImageUrl : await storageService.uploadFile(req.files['images'][i], 'products');
@@ -227,7 +218,7 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
 
         res.status(201).json(product);
     } catch (error) {
-        console.error(error);
+        console.error("Create Product Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -244,8 +235,6 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             [name, description, price, category, stock, specifications, req.params.id]
         );
 
-        // Handle Images Append logic (Simplified: Admin usually re-uploads or manages via separate endpoint)
-        // For now, if new images are sent, add them.
         if (req.files['images']) {
             const maxOrd = await db.one('SELECT COALESCE(MAX(display_order), -1) as m FROM product_images WHERE product_id=$1', [req.params.id]);
             let ord = maxOrd.m + 1;
@@ -257,15 +246,14 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
 
         res.json(product);
     } catch (error) {
+        console.error("Update Product Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Delete Product
-// Archive Product (Soft Delete)
+// Archive Product
 router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
     try {
-        // Instead of DELETE, we UPDATE
         await db.none('UPDATE products SET is_archived = true WHERE id = $1', [req.params.id]);
         res.json({ message: 'Product archived successfully' });
     } catch (error) {
@@ -273,7 +261,7 @@ router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
     }
 });
 
-// Restore Archived Product
+// Restore Product
 router.patch('/:id/restore', authMiddleware, isAdmin, async (req, res) => {
     try {
         await db.none('UPDATE products SET is_archived = false WHERE id = $1', [req.params.id]);
