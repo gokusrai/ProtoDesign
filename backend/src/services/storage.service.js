@@ -18,21 +18,22 @@ export const storageService = {
             else if (file.mimetype.startsWith('video/')) resourceType = 'video';
             else resourceType = 'raw';
 
-            // Force extension for raw files (STLs)
-            const ext = path.extname(file.originalname); // e.g., ".stl"
+            // 1. Sanitize Filename (Fixes "Invalid public_id" error)
+            // Remove everything except letters, numbers, underscores, and hyphens
+            const ext = path.extname(file.originalname); 
             const nameWithoutExt = path.basename(file.originalname, ext);
+            const sanitized = nameWithoutExt.replace(/[^a-zA-Z0-9\-_]/g, '');
 
-            // Generate unique filename WITH extension
-            // Cloudinary 'public_id' usually doesn't include extension for raw files unless forced
-            const uniqueName = `${nameWithoutExt}_${Date.now()}${ext}`;
+            // 2. Generate unique name
+            const uniqueName = `${sanitized}_${Date.now()}${ext}`;
 
             const uploadStream = cloudinary.uploader.upload_stream(
                 {
                     folder: `protodesign/${folder}`,
                     resource_type: resourceType,
-                    public_id: uniqueName, // ✅ Explicitly set name + extension
+                    public_id: uniqueName, 
                     use_filename: true,
-                    unique_filename: false // We handle uniqueness manually above
+                    unique_filename: false 
                 },
                 (error, result) => {
                     if (error) return reject(error);
