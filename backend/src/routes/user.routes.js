@@ -3,54 +3,65 @@ import nodemailer from 'nodemailer';
 import authMiddleware from '../middleware/auth.js';
 import db from '../config/database.js';
 import dns from 'dns';
-
-// ⚡ MAGIC FIX: Force Node.js to use IPv4
-// This stops the ETIMEDOUT error on Render
-if (dns.setDefaultResultOrder) {
-    dns.setDefaultResultOrder('ipv4first');
-}
+import util from 'util';
 
 const router = express.Router();
+const resolve4 = util.promisify(dns.resolve4);
 
 // ==========================================
-// 📧 EMAIL TEST ROUTE
+// 📧 EMAIL TEST ROUTE (Direct IP Method)
 // ==========================================
 router.get('/test-email', async (req, res) => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
-    if (!user || !pass) {
-        return res.status(500).json({ error: "Missing Environment Variables" });
-    }
-
-    // ✅ FIXED CONFIGURATION (Port 587 + STARTTLS)
-    const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,              // Standard Submission Port
-        secure: false,          // Use false for Port 587 (it upgrades to SSL via STARTTLS)
-        auth: { user, pass },
-        tls: {
-            rejectUnauthorized: false // Helps avoid some strict SSL errors
-        },
-        connectionTimeout: 10000, // Fail fast if it hangs
-    });
+    if (!user || !pass) return res.status(500).json({ error: "Missing Env Vars" });
 
     try {
-        console.log("Attempting to connect to Gmail via Port 587...");
+        console.log("🔍 Resolving Gmail IPv4...");
+        
+        // 1. Manually find the IPv4 address (Bypasses IPv6 freeze)
+        const addresses = await resolve4('smtp.gmail.com');
+        const gmailIp = addresses[0]; // Take the first valid IPv4
+        console.log(`✅ Found Gmail IP: ${gmailIp}`);
+
+        // 2. Configure Transporter using the IP DIRECTLY
+        const transporter = nodemailer.createTransport({
+            host: gmailIp, // Connect to IP, not domain
+            port: 465,     // Use Secure SSL Port
+            secure: true,
+            auth: { user, pass },
+            tls: {
+                // Important: Tell TLS we expect this IP to be 'smtp.gmail.com'
+                servername: 'smtp.gmail.com', 
+                rejectUnauthorized: true
+            },
+            connectionTimeout: 10000 // 10 seconds max
+        });
+
+        // 3. Verify
+        console.log(`Attempting connection to ${gmailIp}:465...`);
         await transporter.verify();
         console.log("✅ SMTP Connection Successful");
 
+        // 4. Send
         const info = await transporter.sendMail({
-            from: `"ProtoDesign Test" <${user}>`,
+            from: `"ProtoDesign System" <${user}>`,
             to: user,
-            subject: "Test Email (Port 587 + IPv4)",
-            text: "If you see this, the IPv4 fix worked! 🚀"
+            subject: "Test Email (Direct IP Method)",
+            text: `It worked! We connected via ${gmailIp} to bypass the network timeout.`
         });
 
         res.json({ success: true, message: "Email Sent!", info });
+
     } catch (error) {
         console.error("❌ Email Test Failed:", error);
-        res.status(500).json({ error: error.message, code: error.code });
+        res.status(500).json({ 
+            error: "Connection Failed", 
+            message: error.message,
+            code: error.code,
+            details: "If this fails, Google might be blocking the Render IP range temporarily."
+        });
     }
 });
 // ==========================================
