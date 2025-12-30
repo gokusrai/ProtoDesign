@@ -5,8 +5,12 @@ import App from './App.tsx'
 import './index.css'
 import { GoogleOAuthProvider } from '@react-oauth/google';
 
-// Use your actual Client ID from Google Cloud Console
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "758845023398-4e9kjg5342i0qcdp47gchnr0ganmd3na.apps.googleusercontent.com";
+// Force it to use the environment variable
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+if (!GOOGLE_CLIENT_ID) {
+    console.error("Missing Google Client ID in .env file!");
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
