@@ -52,6 +52,7 @@ router.get('/test-email', async (req, res) => {
         console.error("❌ Email Test Failed:", error);
         res.status(500).json({ error: error.message, code: error.code });
     }
+});
 // ==========================================
 // 👤 PROFILE ROUTES
 // ==========================================
