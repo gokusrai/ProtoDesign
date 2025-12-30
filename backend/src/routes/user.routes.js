@@ -1,9 +1,48 @@
 import express from 'express';
 import authMiddleware from '../middleware/auth.js';
 import db from '../config/database.js';
-
+import nodemailer from 'nodemailer';
 const router = express.Router();
+// Add this to backend/src/routes/user.routes.js (or any active route file)
 
+
+router.get('/test-email', async (req, res) => {
+    const user = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+
+    if (!user || !pass) {
+        return res.status(500).json({ error: "Missing Environment Variables", user, pass: pass ? "*****" : "MISSING" });
+    }
+
+    const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: { user, pass }
+    });
+
+    try {
+        // 1. Verify Connection
+        await transporter.verify();
+        console.log("✅ SMTP Connection Successful");
+
+        // 2. Send Test Mail
+        const info = await transporter.sendMail({
+            from: `"Test System" <${user}>`,
+            to: user, // Send to yourself
+            subject: "Test Email from Render",
+            text: "If you see this, the email system is WORKING!"
+        });
+
+        res.json({ success: true, message: "Email Sent!", info });
+    } catch (error) {
+        console.error("❌ Email Test Failed:", error);
+        res.status(500).json({
+            error: "Email Failed",
+            code: error.code,
+            response: error.response,
+            details: error.message
+        });
+    }
+});
 // --- PROFILE ---
 
 router.get('/profile', authMiddleware, async (req, res, next) => {
