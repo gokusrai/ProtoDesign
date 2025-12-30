@@ -12,42 +12,38 @@ router.get('/test-email', async (req, res) => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
-    // 1. Check if variables exist
-    if (!user || !pass) {
-        return res.status(500).json({ 
-            error: "Missing Environment Variables in Render", 
-            user_configured: !!user, 
-            pass_configured: !!pass 
-        });
-    }
+    if (!user || !pass) return res.status(500).json({ error: "Missing Env Vars" });
 
+    // ✅ FIXED CONFIGURATION
     const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: { user, pass }
+        host: 'smtp.gmail.com',
+        port: 465,              // Force SSL Port
+        secure: true,           // Use SSL
+        auth: { user, pass },
+        logger: true,           // Log details
+        debug: true,            // Show debug info
+        // ⚡ CRITICAL FIX FOR RENDER TIMEOUTS:
+        // Force the connection to use IPv4 only (Cloud servers often fail on IPv6)
+        socketTimeout: 30000,   // 30 seconds
+        dnsTimeout: 30000,
     });
 
     try {
-        // 2. Verify Connection
+        console.log("Attempting to connect to Gmail...");
         await transporter.verify();
         console.log("✅ SMTP Connection Successful");
 
-        // 3. Send Test Mail
         const info = await transporter.sendMail({
             from: `"Test System" <${user}>`,
-            to: user, // Sends email to yourself
-            subject: "Test Email from Render",
-            text: "If you see this, the email system is WORKING! 🚀"
+            to: user,
+            subject: "Test Email (Secure Port 465)",
+            text: "If you see this, the IPv4 fix worked!"
         });
 
-        res.json({ success: true, message: "Email Sent Successfully!", info });
+        res.json({ success: true, message: "Email Sent!", info });
     } catch (error) {
         console.error("❌ Email Test Failed:", error);
-        res.status(500).json({
-            error: "Email Failed to Send",
-            reason: error.message,
-            code: error.code,
-            tip: error.code === 'EAUTH' ? "Check your App Password" : "Check EMAIL_USER spelling"
-        });
+        res.status(500).json({ error: error.message, code: error.code });
     }
 });
 
