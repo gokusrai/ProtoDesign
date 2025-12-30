@@ -87,9 +87,9 @@ router.get('/:id', async (req, res) => {
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
         product.product_images = images;
 
-        // ✅ FIXED: Aliased full_name as 'user' to match Frontend Interface
+        // ✅ FIXED: Return 'user' (name) for frontend
         const reviews = await db.any(`
-            SELECT r.*, u.full_name as user 
+            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user 
             FROM reviews r 
             LEFT JOIN users u ON r.user_id = u.id 
             WHERE r.product_id = $1 
@@ -105,11 +105,11 @@ router.get('/:id', async (req, res) => {
 
 router.get('/:id/reviews', async (req, res) => {
     try {
-        // ✅ FIXED: Aliased full_name as 'user' here too
+        // ✅ FIXED: Return 'user' (name) for frontend
         const reviews = await db.any(`
-            SELECT r.*, u.full_name as user, u.avatar_url 
+            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user, u.avatar_url 
             FROM reviews r 
-            JOIN users u ON r.user_id = u.id 
+            LEFT JOIN users u ON r.user_id = u.id 
             WHERE r.product_id = $1 
             ORDER BY r.created_at DESC
         `, [req.params.id]);
@@ -120,10 +120,26 @@ router.get('/:id/reviews', async (req, res) => {
 router.post('/:id/reviews', authMiddleware, async (req, res) => {
     try {
         const { rating, comment } = req.body;
-        const review = await db.one('INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING *', [req.params.id, req.userId, rating, comment]);
-        await db.none('UPDATE products SET average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1), review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = $1) WHERE id = $1', [req.params.id]);
+        
+        // 1. Insert Review
+        const review = await db.one(
+            'INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING *', 
+            [req.params.id, req.userId, rating, comment]
+        );
+
+        // 2. Update Product Stats
+        await db.none(`
+            UPDATE products SET 
+                average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1), 
+                review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = $1) 
+            WHERE id = $1
+        `, [req.params.id]);
+
         res.json(review);
-    } catch (error) { res.status(500).json({ error: error.message }); }
+    } catch (error) { 
+        console.error("Review Post Error:", error);
+        res.status(500).json({ error: error.message }); 
+    }
 });
 
 router.post('/:id/like', authMiddleware, async (req, res) => {
@@ -147,7 +163,6 @@ router.get('/:id/likes', async (req, res) => { res.json({ message: "Use POST /li
 // ADMIN ROUTES
 // ==========================================
 
-// Create Product
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications } = req.body;
@@ -157,7 +172,6 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
-        // ✅ ADDED short_description
         const product = await db.one(
             `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
@@ -183,12 +197,10 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     }
 });
 
-// Update Product
 router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete } = req.body;
 
-        // ✅ ADDED short_description
         await db.none(
             `UPDATE products 
              SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, updated_at=NOW()
