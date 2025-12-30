@@ -1,17 +1,24 @@
 import express from 'express';
+import nodemailer from 'nodemailer'; // ✅ Added this import
 import authMiddleware from '../middleware/auth.js';
 import db from '../config/database.js';
-import nodemailer from 'nodemailer';
+
 const router = express.Router();
-// Add this to backend/src/routes/user.routes.js (or any active route file)
 
-
+// ==========================================
+// 📧 EMAIL TEST ROUTE (Use this to debug)
+// ==========================================
 router.get('/test-email', async (req, res) => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
+    // 1. Check if variables exist
     if (!user || !pass) {
-        return res.status(500).json({ error: "Missing Environment Variables", user, pass: pass ? "*****" : "MISSING" });
+        return res.status(500).json({ 
+            error: "Missing Environment Variables in Render", 
+            user_configured: !!user, 
+            pass_configured: !!pass 
+        });
     }
 
     const transporter = nodemailer.createTransport({
@@ -20,30 +27,33 @@ router.get('/test-email', async (req, res) => {
     });
 
     try {
-        // 1. Verify Connection
+        // 2. Verify Connection
         await transporter.verify();
         console.log("✅ SMTP Connection Successful");
 
-        // 2. Send Test Mail
+        // 3. Send Test Mail
         const info = await transporter.sendMail({
             from: `"Test System" <${user}>`,
-            to: user, // Send to yourself
+            to: user, // Sends email to yourself
             subject: "Test Email from Render",
-            text: "If you see this, the email system is WORKING!"
+            text: "If you see this, the email system is WORKING! 🚀"
         });
 
-        res.json({ success: true, message: "Email Sent!", info });
+        res.json({ success: true, message: "Email Sent Successfully!", info });
     } catch (error) {
         console.error("❌ Email Test Failed:", error);
         res.status(500).json({
-            error: "Email Failed",
+            error: "Email Failed to Send",
+            reason: error.message,
             code: error.code,
-            response: error.response,
-            details: error.message
+            tip: error.code === 'EAUTH' ? "Check your App Password" : "Check EMAIL_USER spelling"
         });
     }
 });
-// --- PROFILE ---
+
+// ==========================================
+// 👤 PROFILE ROUTES
+// ==========================================
 
 router.get('/profile', authMiddleware, async (req, res, next) => {
     try {
@@ -61,15 +71,7 @@ router.get('/profile', authMiddleware, async (req, res, next) => {
 
 router.put('/profile', authMiddleware, async (req, res, next) => {
     try {
-        // Handle camelCase from Frontend -> snake_case for DB
-        // If the value is undefined (not sent), we want to keep the old value.
-        // If the value is sent (even as empty string), we update it.
         const { fullName, phoneNumber, avatarUrl } = req.body;
-
-        // We use COALESCE($1, full_name) in SQL, but if $1 is undefined, pg-promise might complain or treat it as null.
-        // Better strategy: Use dynamic query or pass current values if new ones are undefined.
-
-        // Simpler approach for this specific case:
         const user = await db.one(
             `UPDATE users
              SET full_name = COALESCE($1, full_name),
@@ -88,7 +90,9 @@ router.put('/profile', authMiddleware, async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-// --- ADDRESSES ---
+// ==========================================
+// 🏠 ADDRESS ROUTES
+// ==========================================
 
 router.get('/addresses', authMiddleware, async (req, res, next) => {
     try {
@@ -100,7 +104,6 @@ router.get('/addresses', authMiddleware, async (req, res, next) => {
 router.post('/addresses', authMiddleware, async (req, res, next) => {
     try {
         const { city, state, pincode, isDefault, label, email } = req.body;
-        // Map Frontend Camel -> DB Snake
         const fullName = req.body.fullName || req.body.full_name;
         const phone = req.body.phone || req.body.phoneNumber;
         const addressLine1 = req.body.addressLine1 || req.body.address_line1;
@@ -121,7 +124,6 @@ router.post('/addresses', authMiddleware, async (req, res, next) => {
 router.put('/addresses/:id', authMiddleware, async (req, res, next) => {
     try {
         const { city, state, pincode, isDefault, label, email } = req.body;
-        // Map Frontend Camel -> DB Snake
         const fullName = req.body.fullName || req.body.full_name;
         const phone = req.body.phone || req.body.phoneNumber;
         const addressLine1 = req.body.addressLine1 || req.body.address_line1;
@@ -148,7 +150,9 @@ router.delete('/addresses/:id', authMiddleware, async (req, res, next) => {
     } catch (err) { next(err); }
 });
 
-// --- SAVED MODELS / QUOTES ---
+// ==========================================
+// 📦 SAVED MODELS
+// ==========================================
 router.get('/models', authMiddleware, async (req, res, next) => {
     try {
         const models = await db.any('SELECT * FROM saved_models WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
