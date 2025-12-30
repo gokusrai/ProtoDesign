@@ -8,9 +8,6 @@ import util from 'util';
 const router = express.Router();
 const resolve4 = util.promisify(dns.resolve4);
 
-// ==========================================
-// 📧 EMAIL TEST ROUTE (Direct IP Method)
-// ==========================================
 router.get('/test-email', async (req, res) => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
@@ -19,37 +16,31 @@ router.get('/test-email', async (req, res) => {
 
     try {
         console.log("🔍 Resolving Gmail IPv4...");
-        
-        // 1. Manually find the IPv4 address (Bypasses IPv6 freeze)
         const addresses = await resolve4('smtp.gmail.com');
-        const gmailIp = addresses[0]; // Take the first valid IPv4
+        const gmailIp = addresses[0];
         console.log(`✅ Found Gmail IP: ${gmailIp}`);
 
-        // 2. Configure Transporter using the IP DIRECTLY
         const transporter = nodemailer.createTransport({
-            host: gmailIp, // Connect to IP, not domain
-            port: 465,     // Use Secure SSL Port
-            secure: true,
+            host: gmailIp,          // Direct IP
+            port: 587,              // ✅ Switch to Port 587
+            secure: false,          // ✅ False for 587 (Upgrades via STARTTLS)
             auth: { user, pass },
             tls: {
-                // Important: Tell TLS we expect this IP to be 'smtp.gmail.com'
-                servername: 'smtp.gmail.com', 
-                rejectUnauthorized: true
+                servername: 'smtp.gmail.com', // Necessary for IP connection
+                rejectUnauthorized: false     // Loose security to bypass strict firewalls
             },
-            connectionTimeout: 10000 // 10 seconds max
+            connectionTimeout: 15000
         });
 
-        // 3. Verify
-        console.log(`Attempting connection to ${gmailIp}:465...`);
+        console.log(`Attempting connection to ${gmailIp}:587...`);
         await transporter.verify();
         console.log("✅ SMTP Connection Successful");
 
-        // 4. Send
         const info = await transporter.sendMail({
             from: `"ProtoDesign System" <${user}>`,
             to: user,
-            subject: "Test Email (Direct IP Method)",
-            text: `It worked! We connected via ${gmailIp} to bypass the network timeout.`
+            subject: "Test Email (Port 587)",
+            text: "If you see this, Port 587 is open!"
         });
 
         res.json({ success: true, message: "Email Sent!", info });
@@ -57,10 +48,10 @@ router.get('/test-email', async (req, res) => {
     } catch (error) {
         console.error("❌ Email Test Failed:", error);
         res.status(500).json({ 
-            error: "Connection Failed", 
+            error: "All SMTP Ports Blocked", 
             message: error.message,
             code: error.code,
-            details: "If this fails, Google might be blocking the Render IP range temporarily."
+            solution: "Switch to Resend (HTTP API)"
         });
     }
 });
