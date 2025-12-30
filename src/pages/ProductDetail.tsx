@@ -17,7 +17,8 @@ import {
     PenLine,
     ArrowRight,
     Headset,
-    MapPin
+    MapPin,
+    Play
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -25,8 +26,6 @@ import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
 import { formatINR } from "@/lib/currency";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play } from "lucide-react";
-
 
 // --- INTERFACES ---
 interface ProductImage {
@@ -169,8 +168,6 @@ const ProductDetail = () => {
 
     const [isAddingToCart, setIsAddingToCart] = useState(false);
 
-
-
     // --- INITIAL DATA FETCH ---
     useEffect(() => {
         const loadData = async () => {
@@ -180,6 +177,7 @@ const ProductDetail = () => {
 
                 // 1. Get Product
                 const productRes = await apiService.getProduct(productId);
+                // Handle both raw object and { data: object } format
                 const fetchedProduct = productRes.data || productRes;
                 setProduct(fetchedProduct);
 
@@ -193,7 +191,9 @@ const ProductDetail = () => {
                 // 2. Get Reviews
                 try {
                     const reviewRes = await apiService.getProductReviews(productId);
-                    setReviews(reviewRes.data || []);
+                    // ✅ FIXED: Correctly handle array response
+                    const reviewsData = Array.isArray(reviewRes) ? reviewRes : (reviewRes.data || []);
+                    setReviews(reviewsData);
                 } catch (e) { console.error("Failed to load reviews"); }
 
                 // 3. Get Related Products (Alternating Logic)
@@ -201,7 +201,7 @@ const ProductDetail = () => {
                     const categoryRes = await apiService.getProducts(fetchedProduct.category);
                     const catProducts = (categoryRes.data || []).filter((p: Product) => p.id !== fetchedProduct.id);
 
-                    // Simulate "Keyword Match" using simple name search or fallback to same category reversed
+                    // Simulate "Keyword Match"
                     const keywordRes = await apiService.getProducts(null, null, );
                     const keywordProducts = (keywordRes.data || []).filter((p: Product) => p.id !== fetchedProduct.id);
 
@@ -240,7 +240,8 @@ const ProductDetail = () => {
     const getProductImages = (): string[] => {
         if (!product) return [];
         const images: string[] = [];
-        // Add Video first (optional, or add it last)
+        
+        // Add Video first (if exists)
         if (product.video_url) images.push(product.video_url);
 
         if (product.product_images?.length) {
@@ -249,12 +250,12 @@ const ProductDetail = () => {
                 if (url) images.push(url);
             });
         }
-        if (!images.length && product.image_url) images.push(product.image_url);
-        // ...
+        // Fallback to old image_url if no gallery
+        if (images.length === 0 && product.image_url) images.push(product.image_url);
+        
         return images;
     };
 
-    // Helper to check if URL is video
     const isVideo = (url: string) => url.includes('.mp4') || url.includes('.webm') || url.includes('video');
 
     const handleAddToCart = async () => {
@@ -283,10 +284,15 @@ const ProductDetail = () => {
         try {
             await apiService.addProductReview(product.id, newReview.rating, newReview.comment);
             toast.success("Review posted!");
+            
+            // Reload reviews
             const reviewRes = await apiService.getProductReviews(product.id);
-            setReviews(reviewRes.data || []);
+            // ✅ FIXED: Correctly handle array response here too
+            const reviewsData = Array.isArray(reviewRes) ? reviewRes : (reviewRes.data || []);
+            setReviews(reviewsData);
+            
             setNewReview({ rating: 0, comment: '' });
-            setIsReviewFormOpen(false); // Close form
+            setIsReviewFormOpen(false);
         } catch (error: any) {
             toast.error(error.message || "Failed to post review");
         } finally {
@@ -509,6 +515,7 @@ const ProductDetail = () => {
                                 currentReviews.map(r => (
                                     <div key={r.id} className="border-b pb-6 last:border-0 last:pb-0">
                                         <div className="flex justify-between items-start mb-2">
+                                            {/* ✅ Shows User Name correctly */}
                                             <div><span className="font-bold text-sm block">{r.user}</span><span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span></div>
                                             <StarRating rating={r.rating} size={14} />
                                         </div>
