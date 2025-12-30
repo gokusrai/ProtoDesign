@@ -1,43 +1,50 @@
 import express from 'express';
-import nodemailer from 'nodemailer'; // ✅ Added this import
+import nodemailer from 'nodemailer';
 import authMiddleware from '../middleware/auth.js';
 import db from '../config/database.js';
+import dns from 'dns';
+
+// ⚡ MAGIC FIX: Force Node.js to use IPv4
+// This stops the ETIMEDOUT error on Render
+if (dns.setDefaultResultOrder) {
+    dns.setDefaultResultOrder('ipv4first');
+}
 
 const router = express.Router();
 
 // ==========================================
-// 📧 EMAIL TEST ROUTE (Use this to debug)
+// 📧 EMAIL TEST ROUTE
 // ==========================================
 router.get('/test-email', async (req, res) => {
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
-    if (!user || !pass) return res.status(500).json({ error: "Missing Env Vars" });
+    if (!user || !pass) {
+        return res.status(500).json({ error: "Missing Environment Variables" });
+    }
 
-    // ✅ FIXED CONFIGURATION
+    // ✅ FIXED CONFIGURATION (Port 587 + STARTTLS)
     const transporter = nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,              // Force SSL Port
-        secure: true,           // Use SSL
+        port: 587,              // Standard Submission Port
+        secure: false,          // Use false for Port 587 (it upgrades to SSL via STARTTLS)
         auth: { user, pass },
-        logger: true,           // Log details
-        debug: true,            // Show debug info
-        // ⚡ CRITICAL FIX FOR RENDER TIMEOUTS:
-        // Force the connection to use IPv4 only (Cloud servers often fail on IPv6)
-        socketTimeout: 30000,   // 30 seconds
-        dnsTimeout: 30000,
+        tls: {
+            rejectUnauthorized: false // Helps avoid some strict SSL errors
+        },
+        connectionTimeout: 10000, // Fail fast if it hangs
     });
 
     try {
-        console.log("Attempting to connect to Gmail...");
+        console.log("Attempting to connect to Gmail via Port 587...");
         await transporter.verify();
         console.log("✅ SMTP Connection Successful");
 
         const info = await transporter.sendMail({
-            from: `"Test System" <${user}>`,
+            from: `"ProtoDesign Test" <${user}>`,
             to: user,
-            subject: "Test Email (Secure Port 465)",
-            text: "If you see this, the IPv4 fix worked!"
+            subject: "Test Email (Port 587 + IPv4)",
+            text: "If you see this, the IPv4 fix worked! 🚀"
         });
 
         res.json({ success: true, message: "Email Sent!", info });
@@ -45,8 +52,6 @@ router.get('/test-email', async (req, res) => {
         console.error("❌ Email Test Failed:", error);
         res.status(500).json({ error: error.message, code: error.code });
     }
-});
-
 // ==========================================
 // 👤 PROFILE ROUTES
 // ==========================================
