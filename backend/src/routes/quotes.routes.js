@@ -127,53 +127,47 @@ router.post('/request', authMiddleware, upload.single('file'), async (req, res) 
         `;
 
         // ----------------------------------------------------
-        // 5. Send Admin Email
+        // 5. Send Admin Email (BACKGROUND - NO AWAIT)
         // ----------------------------------------------------
-        try {
-            await transporter.sendMail({
-                from: `"ProtoDesign System" <${process.env.EMAIL_USER}>`,
-                to: 'protodesign137@gmail.com',
-                subject: `New Request: ${file.originalname} - ₹${specs.estimatedPrice}`,
-                html: adminHtml,
-                attachments: file.size < 10 * 1024 * 1024 ? [{
-                    filename: file.originalname,
-                    content: file.buffer
-                }] : []
-            });
-            console.log('Admin email sent');
-        } catch (err) {
-            console.error('Admin Email Failed:', err);
-        }
+        // ✅ Removed 'await' so UI doesn't freeze
+        transporter.sendMail({
+            from: `"ProtoDesign System" <${process.env.EMAIL_USER}>`,
+            to: process.env.EMAIL_USER, // Send to Admin
+            subject: `New Request: ${file.originalname} - ₹${specs.estimatedPrice}`,
+            html: adminHtml,
+            attachments: file.size < 10 * 1024 * 1024 ? [{
+                filename: file.originalname,
+                content: file.buffer
+            }] : []
+        }).catch(err => console.error('Admin Email Failed:', err));
+
 
         // ----------------------------------------------------
-        // 6. Send Customer Confirmation Email (To the entered email)
+        // 6. Send Customer Confirmation Email (BACKGROUND - NO AWAIT)
         // ----------------------------------------------------
-        try {
-            const customerHtml = `
-                <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2563eb;">🚀 We received your request!</h2>
-                    <p>Hi there,</p>
-                    <p>Thank you for submitting your model <strong>${file.originalname}</strong>.</p>
-                    
-                    <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                        <p><strong>Estimated Price:</strong> ₹${specs.estimatedPrice}</p>
-                        <p><strong>Next Steps:</strong> Our engineers are reviewing the file for printability. We will contact you soon.</p>
-                    </div>
-
-                    <p>Best regards,<br><strong>The ProtoDesign Team</strong></p>
+        const customerHtml = `
+            <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2563eb;">🚀 We received your request!</h2>
+                <p>Hi there,</p>
+                <p>Thank you for submitting your model <strong>${file.originalname}</strong>.</p>
+                
+                <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <p><strong>Estimated Price:</strong> ₹${specs.estimatedPrice}</p>
+                    <p><strong>Next Steps:</strong> Our engineers are reviewing the file for printability. We will contact you soon.</p>
                 </div>
-            `;
 
-            await transporter.sendMail({
-                from: `"ProtoDesign" <${process.env.EMAIL_USER}>`,
-                to: email, // This is Y@gmail.com
-                subject: `Order Received: ${file.originalname}`,
-                html: customerHtml
-            });
-            console.log('Customer email sent');
-        } catch (err) {
-            console.error('Customer Email Failed:', err);
-        }
+                <p>Best regards,<br><strong>The ProtoDesign Team</strong></p>
+            </div>
+        `;
+
+        // ✅ Removed 'await' so UI doesn't freeze
+        transporter.sendMail({
+            from: `"ProtoDesign" <${process.env.EMAIL_USER}>`,
+            to: email, 
+            subject: `Order Received: ${file.originalname}`,
+            html: customerHtml
+        }).catch(err => console.error('Customer Email Failed:', err));
+
 
         res.json({ success: true, message: "Quote requested successfully" });
 
