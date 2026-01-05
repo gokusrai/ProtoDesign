@@ -1,14 +1,12 @@
-// app.ts
-
+// backend/app.ts
 import 'dotenv/config';
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Now it is safe to import routes
+// Import routes
 import authRoutes from './src/routes/auth.routes.js';
 import productsRoutes from './src/routes/products.routes.js';
 import ordersRoutes from './src/routes/orders.routes.js';
@@ -17,147 +15,114 @@ import quotesRoutes from './src/routes/quotes.routes.js';
 import errorHandler from './src/middleware/errorHandler.js';
 import userRoutes from './src/routes/user.routes.js';
 
-
-// Create Express app
 const app = express();
 
 // ============================================
-// SECURITY MIDDLEWARE
+// 1. SECURITY MIDDLEWARE (Updated)
 // ============================================
 
-app.use(helmet());
+// Allow Google Login Popups and Cross-Origin Images
+app.use(helmet({
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:8080',
-    process.env.FRONTEND_URL,  // <--- Crucial for Vercel
-    process.env.CLIENT_URL,
-].filter(Boolean);             // Removes undefined values
-
+    'http://localhost:3000',
+    process.env.FRONTEND_URL,                    // Matches the variable in App Runner
+    'https://master.d30plbjrv1tioc.amplifyapp.com' // ✅ Your specific Frontend URL
+];
 
 app.use(cors({
     origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
-        if (process.env.NODE_ENV === 'development' || allowedOrigins.includes(origin) || origin.startsWith('http://192.168.') || origin.startsWith('http://10.') || origin.startsWith('http://localhost')) {
+        
+        // Check if origin is allowed
+        if (allowedOrigins.includes(origin) || 
+            process.env.NODE_ENV === 'development' && (
+                origin.startsWith('http://192.168.') || 
+                origin.startsWith('http://10.') || 
+                origin.startsWith('http://localhost')
+            )
+        ) {
             return callback(null, true);
         }
+        
+        console.log('❌ CORS Blocked Origin:', origin); // Log blocked origins for debugging
         callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // ============================================
-// 1. BODY PARSING MIDDLEWARE (MUST BE HERE)
+// 2. BODY PARSING
 // ============================================
-// This MUST come before any routes are defined!
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================
-// 2. DEBUG LOGGING (Check your terminal!)
+// 3. DEBUG LOGGING
 // ============================================
-// This helps us see exactly what the frontend is sending
-if (process.env.NODE_ENV === 'development') {
-    app.use((req, res, next) => {
-        console.log(`📝 ${req.method} ${req.path} ${req.ip}`);
-
-        // Log the body for POST/PUT requests to verify data is arriving
-        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-            console.log('📦 Request Body:', req.body ? Object.keys(req.body) : 'undefined');
-        }
-        next();
-    });
-}
+app.use((req, res, next) => {
+    // Only log in production if it's an error or critical path, 
+    // but for now, logging everything helps debug the deployment.
+    console.log(`📝 ${req.method} ${req.path} from ${req.ip}`);
+    next();
+});
 
 // ============================================
-// STATIC FILES
+// 4. STATIC FILES
 // ============================================
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 app.use('/uploads', express.static(path.join(__dirname, 'src/uploads')));
 
 // ============================================
-// API ROUTES
+// 5. API ROUTES
 // ============================================
-
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'OK',
         timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV || 'development',
-        uptime: process.uptime(),
-        clientIP: req.ip
+        environment: process.env.NODE_ENV,
+        allowedOrigins: allowedOrigins // Helpful to see what is allowed in production logs
     });
 });
 
-// Auth routes
 app.use('/api/auth', authRoutes);
-
-// Products routes
 app.use('/api/products', productsRoutes);
-
-// Orders routes
 app.use('/api/orders', ordersRoutes);
-
-// Cart routes
 app.use('/api/cart', cartRoutes);
-
 app.use('/api/quotes', quotesRoutes);
-
 app.use('/api/user', userRoutes);
 
 // ============================================
-// 404 HANDLER
+// 6. ERROR HANDLING
 // ============================================
-
 app.use((req, res) => {
-    res.status(404).json({
-        error: 'Route not found',
-        path: req.path,
-        method: req.method
-    });
+    res.status(404).json({ error: 'Route not found', path: req.path });
 });
-
-
-
-// ============================================
-// ERROR HANDLER (MUST BE LAST)
-// ============================================
 
 app.use(errorHandler);
 
 // ============================================
-// SERVER STARTUP
+// 7. SERVER START
 // ============================================
-
-const PORT = Number(process.env.PORT || 3001);
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = Number(process.env.PORT || 8080);
+const HOST = '0.0.0.0'; // Must be 0.0.0.0 for AWS/Render
 
 const server = app.listen(PORT, HOST, () => {
-    console.log(`
-╔══════════════════════════════════════════════╗
-║           ProtoDesign API Server             ║
-╠══════════════════════════════════════════════╣
-║ ✅ Server running on port: ${PORT}
-║ ✅ Local:          http://localhost:${PORT}
-║ ✅ Network:        http://${HOST}:${PORT}
-║ 🔧 Environment:    ${process.env.NODE_ENV || 'development'}
-╚══════════════════════════════════════════════╝
-    `);
+    console.log(`✅ Server running on http://${HOST}:${PORT}`);
 });
 
-
-// Graceful shutdown
 process.on('SIGTERM', () => {
-    console.log('SIGTERM signal received: closing HTTP server');
-    server.close(() => {
-        console.log('HTTP server closed');
-        process.exit(0);
-    });
+    console.log('SIGTERM received. Closing server...');
+    server.close(() => process.exit(0));
 });
 
 export default app;
