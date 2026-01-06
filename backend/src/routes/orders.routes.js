@@ -207,13 +207,21 @@ router.post('/', authMiddleware, async (req, res, next) => {
 
         // 6. Send Email (Async)
         db.oneOrNone('SELECT email, full_name FROM users WHERE id = $1', [req.userId])
-            .then(user => {
+            .then(async (user) => {
                 if (user) {
-                    emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems);
+                    try {
+                        console.log(`📧 Attempting to send email to ${user.email}...`);
+                        await emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems);
+                        console.log('✅ Email sent successfully');
+                    } catch (emailErr) {
+                        // THIS CATCH BLOCK PREVENTS THE CRASH
+                        console.error('❌ FAILED to send email (Server continued running):', emailErr);
+                    }
                 }
             })
-            .catch(err => console.error('Email failed:', err));
+            .catch(err => console.error('❌ Database error fetching user for email:', err));
 
+        // Response is sent successfully regardless of email status
         res.status(201).json({ message: 'Order placed successfully', orderId: newOrder.id });
     } catch (error) {
         console.error('Order Error:', error);
