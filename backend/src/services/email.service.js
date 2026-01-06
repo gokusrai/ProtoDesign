@@ -15,6 +15,14 @@ const transporter = nodemailer.createTransport({
     }
 });
 
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error('❌ Email Server Connection Error:', error);
+    } else {
+        console.log('✅ Email Server is ready to take our messages');
+    }
+});
+
 export const emailService = {
     /**
      * Send Welcome Email
