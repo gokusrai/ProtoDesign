@@ -14,6 +14,7 @@ import {
     UserCircle,
     Package
 } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
@@ -94,11 +95,11 @@ export const Navigation = () => {
     }
 }, []);
 
-    useEffect(() => {
-        checkAuthStatus().finally(() => {
-            setAuthLoading(false);
-        });
-    }, [checkAuthStatus]);
+    const location = useLocation();
+
+useEffect(() => {
+    checkAuthStatus();
+}, [checkAuthStatus, location.pathname]); // Re-check only when changing pages
 
     useEffect(() => {
         const interval = setInterval(checkAuthStatus, 1000);
