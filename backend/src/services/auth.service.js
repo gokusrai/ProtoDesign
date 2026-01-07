@@ -150,13 +150,24 @@ export const authService = {
     },
 
     _generateToken(userId, email, role) {
-        if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not defined');
-        return jwt.sign(
-            { userId, email, role },
-            process.env.JWT_SECRET,
-            { expiresIn: (process.env.JWT_EXPIRY || '7d') }
-        );
-    },
+    if (!process.env.JWT_SECRET) throw new Error('JWT_SECRET is not defined');
+
+    // 1. Get the raw value
+    let expiry = process.env.JWT_EXPIRY || '7d';
+
+    // 2. CHECK: Is it just digits? (e.g., "3600" or "86400")
+    // If yes, parse it to an Integer so jwt treats it as SECONDS.
+    if (/^\d+$/.test(expiry)) {
+        expiry = parseInt(expiry, 10);
+    }
+
+    // 3. Sign the token
+    return jwt.sign(
+        { userId, email, role },
+        process.env.JWT_SECRET,
+        { expiresIn: expiry }
+    );
+},
 
     // ... (Keep existing verifyToken, getUserById, changePassword, forgotPassword, resetPassword methods unchanged)
 
