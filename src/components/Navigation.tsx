@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
     Menu,
@@ -8,13 +8,10 @@ import {
     ChevronDown,
     ChevronRight,
     Search,
-    User,
     LogOut,
-    Settings,
     UserCircle,
     Package
 } from "lucide-react";
-import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
 import { useCart } from "@/contexts/CartContext";
@@ -52,62 +49,59 @@ export const Navigation = () => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
     const navigate = useNavigate();
+    const location = useLocation(); // ✅ Added useLocation hook
     const { itemCount } = useCart();
 
     const checkAuthStatus = useCallback(async () => {
-    try {
-        // 1. If no token exists in memory/localstorage, stop.
-        if (!apiService.isAuthenticated()) {
-            setUser(null);
-            setIsAdmin(false);
-            return;
+        try {
+            // 1. If no token exists in memory/localstorage, stop.
+            if (!apiService.isAuthenticated()) {
+                setUser(null);
+                setIsAdmin(false);
+                return;
+            }
+
+            // 2. Verify token with backend
+            const userInfo = await apiService.getCurrentUser();
+
+            // 3. Format Name
+            let fullName = userInfo.user?.fullName || userInfo.user?.email?.split("@")[0];
+            if (fullName) {
+                fullName = fullName.charAt(0).toUpperCase() + fullName.slice(1);
+            }
+
+            setUser({
+                id: userInfo.id || userInfo.user?.id || '',
+                email: userInfo.user?.email || '',
+                name: fullName,
+                role: userInfo.role || userInfo.user?.role,
+            });
+
+            setIsAdmin(userInfo.role === 'admin' || userInfo.user?.role === 'admin');
+
+        } catch (error: any) {
+            console.error('Auth check failed:', error);
+
+            // ✅ CRITICAL FIX: Only logout if it's a REAL authentication error (401)
+            // If it's a Network Error or Timeout (Server Sleeping), DO NOT LOGOUT.
+            if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+                apiService.clearToken();
+                setUser(null);
+                setIsAdmin(false);
+            }
+            // Else: Do nothing. Keep the user "logged in" on the frontend while backend wakes up.
         }
+    }, []);
 
-        // 2. Verify token with backend
-        const userInfo = await apiService.getCurrentUser();
-        
-        // 3. Format Name
-        let fullName = userInfo.user?.fullName || userInfo.user?.email?.split("@")[0];
-        if (fullName) {
-            fullName = fullName.charAt(0).toUpperCase() + fullName.slice(1);
-        }
-
-        setUser({
-            id: userInfo.id || userInfo.user?.id || '',
-            email: userInfo.user?.email || '',
-            name: fullName,
-            role: userInfo.role || userInfo.user?.role,
-        });
-
-        setIsAdmin(userInfo.role === 'admin' || userInfo.user?.role === 'admin');
-
-    } catch (error: any) {
-        console.error('Auth check failed:', error);
-        
-        // ✅ FIX: Only logout if it's a REAL authentication error (401)
-        // If it's a Network Error or Timeout (Server Sleeping), DO NOT LOGOUT.
-        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
-             apiService.clearToken();
-             setUser(null);
-             setIsAdmin(false);
-        }
-        // Else: Do nothing. Keep the user "logged in" on the frontend while backend wakes up.
-    }
-}, []);
-
-    const location = useLocation();
-
-useEffect(() => {
-    checkAuthStatus();
-}, [checkAuthStatus, location.pathname]); // Re-check only when changing pages
-
+    // ✅ FIXED useEffect: Handles loading state correctly
     useEffect(() => {
         const initAuth = async () => {
             await checkAuthStatus();
-            setAuthLoading(false); // <--- This was missing!
+            setAuthLoading(false); // <--- This reveals the menu!
         };
         initAuth();
     }, [checkAuthStatus, location.pathname]);
+
 
     const handleSignOut = async () => {
         try {
