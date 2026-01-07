@@ -36,8 +36,7 @@ export default function Auth() {
             const response = await apiService.loginWithGoogle(credentialResponse.credential);
 
             // Save session
-            localStorage.setItem('token', response.token);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            navigate(response.user.role === 'admin' ? '/admin' : '/');
 
             // Notify & Redirect
             toast.success(`Welcome back, ${response.user.full_name}!`);
@@ -64,8 +63,7 @@ export default function Auth() {
         setIsLoading(true);
         try {
             const response = await apiService.login(loginData.email, loginData.password);
-            localStorage.setItem('token', response.token);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            navigate(response.user.role === 'admin' ? '/admin' : '/');
             toast.success('Logged in successfully');
 
             const redirectUrl = localStorage.getItem('redirectAfterLogin');
@@ -91,8 +89,7 @@ export default function Auth() {
         setIsLoading(true);
         try {
             const response = await apiService.register(signupData.fullName, signupData.email, signupData.password);
-            localStorage.setItem('token', response.token);
-            localStorage.setItem('user', JSON.stringify(response.user));
+            navigate(response.user.role === 'admin' ? '/admin' : '/');
             toast.success('Account created successfully');
             navigate('/');
         } catch (error: any) {
