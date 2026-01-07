@@ -102,9 +102,12 @@ useEffect(() => {
 }, [checkAuthStatus, location.pathname]); // Re-check only when changing pages
 
     useEffect(() => {
-        const interval = setInterval(checkAuthStatus, 1000);
-        return () => clearInterval(interval);
-    }, [checkAuthStatus]);
+        const initAuth = async () => {
+            await checkAuthStatus();
+            setAuthLoading(false); // <--- This was missing!
+        };
+        initAuth();
+    }, [checkAuthStatus, location.pathname]);
 
     const handleSignOut = async () => {
         try {
