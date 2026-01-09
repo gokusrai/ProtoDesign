@@ -1,3 +1,7 @@
-https://proto-design-azure.vercel.app/
-https://master.d30plbjrv1tioc.amplifyapp.com
-https://cw9qg3tydc.us-east-1.awsapprunner.com
+(https://master.d1nvmqnm9trfi1.amplifyapp.com/)
+
+
+
+
+
+(https://7rphdmquxg.ap-south-1.awsapprunner.com/)
