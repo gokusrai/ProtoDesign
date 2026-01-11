@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Profile from "./pages/Profile";
+import BulkUpload from "@/pages/BulkUpload.tsx";
 
 const queryClient = new QueryClient();
 
@@ -108,6 +109,7 @@ const App = () => (
                         <Route path="/forgot-password" element={<ForgotPassword />} />
                         <Route path="/reset-password" element={<ResetPassword />} />
                         <Route path="/admin" element={<AdminDashboard />} />
+                        <Route path="/bulk-upload" element={<BulkUpload />} /> {/* ✅ New Route */}
                         <Route path="*" element={<NotFound />} />
                         <Route path="/profile" element={<Profile />} />
                     </Routes>

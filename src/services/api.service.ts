@@ -220,6 +220,15 @@ class ApiService {
 
     // ========== Products Routes ==========
 
+    async bulkUploadProducts(file: File) {
+        const formData = new FormData();
+        formData.append('file', file);
+        return this.request('/products/bulk', {
+            method: 'POST',
+            body: formData,
+        });
+    }
+
     async getProducts(category?: string | null, subCategory?: string | null, search?: string | null) {
         const params = new URLSearchParams();
 

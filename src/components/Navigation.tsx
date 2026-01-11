@@ -10,7 +10,9 @@ import {
     Search,
     LogOut,
     UserCircle,
-    Package
+    Package,
+    Settings,
+    Upload // ✅ Import Upload Icon
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
@@ -31,7 +33,6 @@ interface UserInfo {
     role?: string;
 }
 
-// 🔥 ADDED "All Products" to the top
 const CATEGORIES = [
     { name: "All Products", path: "/shop" },
     { name: "3D Printers", path: "/printers" },
@@ -49,22 +50,18 @@ export const Navigation = () => {
     const [isAdmin, setIsAdmin] = useState(false);
     const [authLoading, setAuthLoading] = useState(true);
     const navigate = useNavigate();
-    const location = useLocation(); // ✅ Added useLocation hook
+    const location = useLocation();
     const { itemCount } = useCart();
 
     const checkAuthStatus = useCallback(async () => {
         try {
-            // 1. If no token exists in memory/localstorage, stop.
             if (!apiService.isAuthenticated()) {
                 setUser(null);
                 setIsAdmin(false);
                 return;
             }
 
-            // 2. Verify token with backend
             const userInfo = await apiService.getCurrentUser();
-
-            // 3. Format Name
             let fullName = userInfo.user?.fullName || userInfo.user?.email?.split("@")[0];
             if (fullName) {
                 fullName = fullName.charAt(0).toUpperCase() + fullName.slice(1);
@@ -81,27 +78,21 @@ export const Navigation = () => {
 
         } catch (error: any) {
             console.error('Auth check failed:', error);
-
-            // ✅ CRITICAL FIX: Only logout if it's a REAL authentication error (401)
-            // If it's a Network Error or Timeout (Server Sleeping), DO NOT LOGOUT.
             if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
                 apiService.clearToken();
                 setUser(null);
                 setIsAdmin(false);
             }
-            // Else: Do nothing. Keep the user "logged in" on the frontend while backend wakes up.
         }
     }, []);
 
-    // ✅ FIXED useEffect: Handles loading state correctly
     useEffect(() => {
         const initAuth = async () => {
             await checkAuthStatus();
-            setAuthLoading(false); // <--- This reveals the menu!
+            setAuthLoading(false);
         };
         initAuth();
     }, [checkAuthStatus, location.pathname]);
-
 
     const handleSignOut = async () => {
         try {
@@ -135,14 +126,12 @@ export const Navigation = () => {
                         </span>
                     </Link>
 
-
                     {/* Desktop Nav */}
                     <div className="hidden md:flex items-center space-x-8">
                         <Link to="/" className="text-sm font-medium text-foreground/80 hover:text-primary transition-colors">
                             Home
                         </Link>
 
-                        {/* Dropdown - Keeping UI EXACTLY as before */}
                         <div className="relative group h-20 flex items-center">
                             <button className="flex items-center gap-1 text-sm font-medium text-foreground/80 group-hover:text-primary transition-colors focus:outline-none">
                                 Products
@@ -167,7 +156,7 @@ export const Navigation = () => {
                             Custom Printing
                         </Link>
 
-                        {/* ✅ RESTORED: Admin Button */}
+                        {/* Admin Button (Desktop) */}
                         {isAdmin && (
                             <Link to="/admin" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
                                 Admin Dashboard
@@ -207,10 +196,32 @@ export const Navigation = () => {
                                     <DropdownMenuContent align="end" className="w-56">
                                         <DropdownMenuLabel>My Account</DropdownMenuLabel>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => navigate('/profile')}><UserCircle className="mr-2 h-4 w-4" /> Profile</DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => navigate('/orders')}><Package className="mr-2 h-4 w-4" /> Orders</DropdownMenuItem>
+
+                                        <DropdownMenuItem onClick={() => navigate('/profile')}>
+                                            <UserCircle className="mr-2 h-4 w-4" /> Profile
+                                        </DropdownMenuItem>
+
+                                        <DropdownMenuItem onClick={() => navigate('/orders')}>
+                                            <Package className="mr-2 h-4 w-4" /> Orders
+                                        </DropdownMenuItem>
+
+                                        {/* ✅ Bulk Upload (Desktop Dropdown) */}
+                                        {isAdmin && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem onClick={() => navigate('/bulk-upload')}>
+                                                    <Upload className="mr-2 h-4 w-4" /> Bulk Upload
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => navigate('/admin')}>
+                                                    <Settings className="mr-2 h-4 w-4" /> Admin Dashboard
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
+
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive"><LogOut className="mr-2 h-4 w-4" /> Sign Out</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
+                                            <LogOut className="mr-2 h-4 w-4" /> Sign Out
+                                        </DropdownMenuItem>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             ) : (
@@ -266,7 +277,18 @@ export const Navigation = () => {
                                         <Link to="/orders" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg">My Orders</Link>
                                     </>
                                 )}
-                                {isAdmin && <Link to="/admin" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg text-primary">Admin Dashboard</Link>}
+
+                                {/* ✅ ADDED: Mobile Bulk Upload & Admin Links */}
+                                {isAdmin && (
+                                    <>
+                                        <Link to="/bulk-upload" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg flex items-center gap-2">
+                                            <Upload className="w-4 h-4"/> Bulk Upload
+                                        </Link>
+                                        <Link to="/admin" onClick={() => setIsOpen(false)} className="block py-3 px-3 font-medium hover:bg-accent rounded-lg text-primary flex items-center gap-2">
+                                            <Settings className="w-4 h-4"/> Admin Dashboard
+                                        </Link>
+                                    </>
+                                )}
 
                                 <div className="pt-4 mt-2 border-t">
                                     {user ? (

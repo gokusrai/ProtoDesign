@@ -113,7 +113,7 @@ app.use(errorHandler);
 // ============================================
 // 7. SERVER START
 // ============================================
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 3001);
 const HOST = '0.0.0.0'; // Must be 0.0.0.0 for AWS/Render
 
 const server = app.listen(PORT, HOST, () => {
