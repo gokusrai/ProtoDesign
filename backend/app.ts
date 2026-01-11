@@ -32,7 +32,7 @@ const allowedOrigins = [
     'http://localhost:8080',
     'http://localhost:3000',
     process.env.FRONTEND_URL,                    // Matches the variable in App Runner
-    'https://master.d30plbjrv1tioc.amplifyapp.com' // ✅ Your specific Frontend URL
+    'https://master.d1nvmqnm9trfi1.amplifyapp.com' // ✅ Your specific Frontend URL
 ];
 
 app.use(cors({
