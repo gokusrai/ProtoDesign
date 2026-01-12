@@ -34,15 +34,14 @@ export default function BulkUpload() {
         }
     };
 
-    // ✅ UPDATED: Adds BOM (\uFEFF) for Excel UTF-8 Compatibility
+    // ✅ UPDATED TEMPLATE: Includes 'images' column and examples
     const downloadTemplate = () => {
         const csvContent =
-            `name,price,stock,category,sub_category,short_description,description,specifications
-Standard PLA,1200,50,filament,PLA,Everyday filament,"High quality PLA.\\n\\nFeatures:\\n- Strong\\n- Easy to print",Material : PLA; Color : Red; Weight : 1kg
-Ender 3 V3,18000,10,3d_printer,FDM,Starter Printer,Reliable FDM printer.\\nGreat for students.,Build Volume : 220x220; Nozzle : 0.4mm`;
+            `name,price,stock,category,sub_category,short_description,description,specifications,images
+Standard PLA,1200,50,filament,PLA,Everyday filament,"High quality PLA.\\n\\nFeatures:\\n- Strong\\n- Easy to print",Material : PLA; Color : Red; Weight : 1kg,"https://drive.google.com/file/d/123/view
+https://imgur.com/image.jpg"
+Ender 3 V3,18000,10,3d_printer,FDM,Starter Printer,Reliable FDM printer.,Build Volume : 220x220; Nozzle : 0.4mm,`;
 
-        // \uFEFF is the UTF-8 Byte Order Mark (BOM)
-        // This tells Excel "This file is UTF-8 encoded"
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -55,7 +54,7 @@ Ender 3 V3,18000,10,3d_printer,FDM,Starter Printer,Reliable FDM printer.\\nGreat
         <div className="container mx-auto px-4 pt-24 pb-12 min-h-screen max-w-3xl">
             <div className="mb-8">
                 <h1 className="text-3xl font-bold mb-2">Bulk Product Upload</h1>
-                <p className="text-muted-foreground">Quickly add text-only product data.</p>
+                <p className="text-muted-foreground">Quickly add products via CSV with text and image links.</p>
             </div>
 
             <Card>
@@ -67,25 +66,48 @@ Ender 3 V3,18000,10,3d_printer,FDM,Starter Printer,Reliable FDM printer.\\nGreat
                         </Button>
                     </div>
                     <CardDescription>
-                        Use this template to ensure correct formatting.
+                        Contains headers and examples for all supported fields.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
 
-                    <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900 text-sm space-y-3">
+                    {/* ✅ UPDATED: Comprehensive Formatting Guide */}
+                    <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900 text-sm space-y-4">
                         <div className="flex items-center gap-2 font-semibold text-blue-700 dark:text-blue-400">
-                            <Info size={16} /> Formatting Guide
+                            <Info size={16} /> CSV Formatting Guide
                         </div>
-                        <ul className="list-disc pl-5 text-muted-foreground space-y-2">
-                            <li>
-                                <b>New Lines:</b> Type <code>\n</code> in your Excel cell to create a new line in the description.
-                                <br/><i>Example:</i> <code>Line 1\nLine 2</code>
-                            </li>
-                            <li>
-                                <b>Specifications:</b> Use <code>Key : Value; Key : Value</code>
-                                <br/><i>Example:</i> <code>Material : PLA; Color : Red</code>
-                            </li>
-                        </ul>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Left Column: Essential */}
+                            <div>
+                                <h4 className="font-bold text-blue-900 dark:text-blue-300 mb-2">Required Columns</h4>
+                                <ul className="list-disc pl-4 text-muted-foreground space-y-1">
+                                    <li><b>name:</b> Product title.</li>
+                                    <li><b>price:</b> Numbers only (e.g. <code>1200</code>). Symbols removed automatically.</li>
+                                    <li><b>stock:</b> Quantity available (e.g. <code>50</code>).</li>
+                                </ul>
+                            </div>
+
+                            {/* Right Column: Special Formats */}
+                            <div>
+                                <h4 className="font-bold text-blue-900 dark:text-blue-300 mb-2">Special Formats</h4>
+                                <ul className="list-disc pl-4 text-muted-foreground space-y-1">
+                                    <li><b>New Lines:</b> Type <code>\n</code> in description for line breaks.</li>
+                                    <li><b>Specs:</b> Format as <code>Key : Value;</code> (Use semicolon to separate).</li>
+                                    <li><b>Images:</b> Paste Links (Drive/Imgur) separated by space or new line.</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-blue-200 dark:border-blue-800">
+                            <h4 className="font-bold text-blue-900 dark:text-blue-300 mb-2">Optional Columns Reference</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                                <p><code className="font-semibold text-blue-700">category</code>: Main ID (e.g. <i>3d_printer, filament</i>).</p>
+                                <p><code className="font-semibold text-blue-700">sub_category</code>: Filter tag (e.g. <i>PLA, FDM</i>).</p>
+                                <p><code className="font-semibold text-blue-700">short_description</code>: 1-2 sentence summary.</p>
+                                <p><code className="font-semibold text-blue-700">description</code>: Full details. Supports <code>\n</code>.</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div className="border-t pt-6">

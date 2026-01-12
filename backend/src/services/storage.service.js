@@ -9,39 +9,45 @@ cloudinary.config({
 });
 
 export const storageService = {
+    // 1. Upload from Buffer (File Uploads)
     async uploadFile(file, folder = 'misc') {
         return new Promise((resolve, reject) => {
-
-            // Determine resource type
             let resourceType = 'auto';
-            if (file.mimetype.startsWith('image/')) resourceType = 'image';
-            else if (file.mimetype.startsWith('video/')) resourceType = 'video';
-            else resourceType = 'raw';
+            if (file.mimetype && file.mimetype.startsWith('image/')) resourceType = 'image';
+            else if (file.mimetype && file.mimetype.startsWith('video/')) resourceType = 'video';
 
-            // 1. Sanitize Filename (Fixes "Invalid public_id" error)
-            // Remove everything except letters, numbers, underscores, and hyphens
-            const ext = path.extname(file.originalname); 
+            const ext = path.extname(file.originalname);
             const nameWithoutExt = path.basename(file.originalname, ext);
             const sanitized = nameWithoutExt.replace(/[^a-zA-Z0-9\-_]/g, '');
-
-            // 2. Generate unique name
             const uniqueName = `${sanitized}_${Date.now()}${ext}`;
 
             const uploadStream = cloudinary.uploader.upload_stream(
                 {
                     folder: `protodesign/${folder}`,
                     resource_type: resourceType,
-                    public_id: uniqueName, 
+                    public_id: uniqueName,
                     use_filename: true,
-                    unique_filename: false 
+                    unique_filename: false
                 },
                 (error, result) => {
                     if (error) return reject(error);
                     resolve(result.secure_url);
                 }
             );
-
             streamifier.createReadStream(file.buffer).pipe(uploadStream);
+        });
+    },
+
+    // 2. Upload from URL (Fixed for Bulk Import)
+    async uploadFromUrl(url, folder = 'misc') {
+        return new Promise((resolve, reject) => {
+            cloudinary.uploader.upload(url, {
+                folder: `protodesign/${folder}`,
+                resource_type: 'image' // ✅ FORCE 'image' type (Fixes raw/no-extension issue)
+            }, (error, result) => {
+                if (error) return reject(error);
+                resolve(result.secure_url);
+            });
         });
     }
 };

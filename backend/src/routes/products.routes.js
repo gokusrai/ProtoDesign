@@ -38,12 +38,9 @@ const isAdmin = async (req, res, next) => {
     }
 };
 
-// --- HELPER: SAFE CSV PARSER ---
+// CSV Parser
 const parseCSV = (buffer) => {
-    // Try to decode as UTF-8. If your file is Windows-1252, this is where  comes from.
-    // Excel Users: Save as "CSV UTF-8 (Comma delimited)" to fix text issues.
     const text = buffer.toString();
-
     const rows = [];
     let currentRow = [];
     let currentCell = '';
@@ -55,38 +52,21 @@ const parseCSV = (buffer) => {
 
         if (char === '"') {
             if (insideQuotes && nextChar === '"') {
-                currentCell += '"'; // Handle escaped quote ("")
-                i++;
-            } else {
-                insideQuotes = !insideQuotes;
-            }
+                currentCell += '"'; i++;
+            } else insideQuotes = !insideQuotes;
         } else if (char === ',' && !insideQuotes) {
-            currentRow.push(currentCell.trim());
-            currentCell = '';
+            currentRow.push(currentCell.trim()); currentCell = '';
         } else if ((char === '\n' || char === '\r') && !insideQuotes) {
             if (char === '\r' && nextChar === '\n') i++;
-
             currentRow.push(currentCell.trim());
-            if (currentRow.length > 0 && (currentRow.length > 1 || currentRow[0] !== '')) {
-                rows.push(currentRow);
-            }
-            currentRow = [];
-            currentCell = '';
-        } else {
-            currentCell += char;
-        }
+            if (currentRow.length > 0 && (currentRow.length > 1 || currentRow[0] !== '')) rows.push(currentRow);
+            currentRow = []; currentCell = '';
+        } else currentCell += char;
     }
-
-    if (currentCell || currentRow.length > 0) {
-        currentRow.push(currentCell.trim());
-        rows.push(currentRow);
-    }
-
+    if (currentCell || currentRow.length > 0) { currentRow.push(currentCell.trim()); rows.push(currentRow); }
     if (rows.length < 2) return [];
 
-    // Clean headers
     const headers = rows[0].map(h => h.replace(/^"|"$/g, '').replace(/^\uFEFF/, '').toLowerCase().trim());
-
     return rows.slice(1).map(row => {
         const obj = {};
         headers.forEach((h, i) => obj[h] = row[i] || '');
@@ -94,78 +74,109 @@ const parseCSV = (buffer) => {
     });
 };
 
-// --- HELPER: SPEC PARSER (Key : Value;) ---
 const parseSpecs = (str) => {
     if (!str) return {};
     const specs = {};
     const items = str.split(';').map(s => s.trim()).filter(s => s);
-
     items.forEach(item => {
-        let separatorIndex = item.indexOf(':');
-        if (separatorIndex === -1) separatorIndex = item.indexOf(' '); // Fallback
-
-        if (separatorIndex === -1) {
-            if(item.length > 0) specs[item] = "Yes";
-        } else {
-            const key = item.substring(0, separatorIndex).trim();
-            const val = item.substring(separatorIndex + 1).trim();
+        let sep = item.indexOf(':');
+        if (sep === -1) sep = item.indexOf(' ');
+        if (sep === -1) { if(item.length > 0) specs[item] = "Yes"; }
+        else {
+            const key = item.substring(0, sep).trim();
+            const val = item.substring(sep + 1).trim();
             if (key) specs[key] = val;
         }
     });
     return specs;
 };
 
-// ✅ BULK UPLOAD ROUTE
+// ✅ UPDATED HELPER: Robust Google Drive Link Converter
+const formatImageUrl = (url) => {
+    if (!url) return null;
+
+    // Check if it is a Google Drive Link
+    if (url.includes('drive.google.com')) {
+        // Pattern 1: /file/d/ID/view (Standard "Share" link)
+        const matchView = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (matchView && matchView[1]) {
+            return `https://drive.google.com/uc?export=download&id=${matchView[1]}`;
+        }
+
+        // Pattern 2: open?id=ID (The "Copy Link" format you are using)
+        const matchOpen = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (matchOpen && matchOpen[1]) {
+            return `https://drive.google.com/uc?export=download&id=${matchOpen[1]}`;
+        }
+    }
+    return url;
+};
+
+// BULK UPLOAD ROUTE
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
     console.log("📂 Received Bulk Upload");
     try {
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
         const products = parseCSV(req.file.buffer);
-        console.log(`✅ Parsed ${products.length} rows`);
-
         const results = { success: 0, failed: 0, errors: [] };
 
         for (const p of products) {
-            // ✅ FIX 1: SANITIZE PRICE & STOCK
-            // Removes "₹", ",", "?", spaces, or any non-number characters
             const rawPrice = p.price ? p.price.toString().replace(/[^0-9.]/g, '') : "";
             const rawStock = p.stock ? p.stock.toString().replace(/[^0-9]/g, '') : "0";
 
             if (!p.name || !rawPrice) {
                 if (Object.values(p).join('').length > 0) {
                     results.failed++;
-                    results.errors.push(`Skipped row: ${p.name || 'Unknown'} (Missing valid Price)`);
+                    results.errors.push(`Skipped row: ${p.name || 'Unknown'} (Missing Price)`);
                 }
                 continue;
             }
 
             try {
                 const specs = parseSpecs(p.specifications || "");
-
-                // Fix Newlines in Description
                 let desc = p.description || "";
                 desc = desc.replace(/\\n/g, '\n');
-
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
 
-                await db.one(
+                const product = await db.one(
                     `INSERT INTO products (
-                        name, price, stock, category, sub_category, 
-                        short_description, description, specifications, image_url
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+                        name, price, stock, category, sub_category,
+                        short_description, description, specifications
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
                     [
-                        p.name,
-                        parseFloat(rawPrice), // Uses cleaned price
-                        parseInt(rawStock),   // Uses cleaned stock
-                        cat,
-                        p.sub_category || '',
-                        p.short_description || '',
-                        desc,
-                        specs,
-                        null
+                        p.name, parseFloat(rawPrice), parseInt(rawStock),
+                        cat, p.sub_category || '', p.short_description || '', desc, specs
                     ]
                 );
+
+                // Handle Images
+                if (p.images) {
+                    let rawImages = p.images.replace(/\\n/g, '\n');
+                    const urls = rawImages.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(u => u.length > 0);
+
+                    for (let i = 0; i < urls.length; i++) {
+                        // This now correctly converts your "open?id=" links
+                        const directUrl = formatImageUrl(urls[i]);
+
+                        try {
+                            console.log(`   ☁️ Uploading Image ${i+1}/${urls.length} for ${p.name}`);
+                            const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products');
+
+                            await db.none(
+                                'INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)',
+                                [product.id, cloudUrl, i]
+                            );
+
+                            if (i === 0) {
+                                await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
+                            }
+                        } catch (imgErr) {
+                            console.error(`   ⚠️ Failed image: ${directUrl}`, imgErr.message);
+                        }
+                    }
+                }
+
                 results.success++;
             } catch (err) {
                 console.error(`Row Error (${p.name}):`, err.message);
