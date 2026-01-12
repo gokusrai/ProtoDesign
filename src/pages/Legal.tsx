@@ -1,0 +1,198 @@
+import React from "react";
+import { Link } from "react-router-dom";
+import { Card } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, Mail, Phone, MapPin } from "lucide-react";
+
+// Shared Layout for all Legal Pages to ensure UI consistency
+const LegalPageLayout = ({ title, lastUpdated, children }: { title: string, lastUpdated: string, children: React.ReactNode }) => {
+    return (
+        <div className="min-h-screen bg-background pt-28 pb-16">
+            <div className="container mx-auto px-4 max-w-4xl">
+
+                {/* Back Button */}
+                <div className="mb-6">
+                    <Link to="/">
+                        <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+                            <ChevronLeft className="h-4 w-4" /> Back to Home
+                        </Button>
+                    </Link>
+                </div>
+
+                <Card className="p-8 md:p-12 shadow-sm border border-border/60 bg-card">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-display font-bold text-foreground tracking-tight">{title}</h1>
+                            <p className="text-muted-foreground mt-2 text-sm">Last Updated: {lastUpdated}</p>
+                        </div>
+
+                        {/* Trust/Contact Block */}
+                        <div className="flex flex-col gap-2 text-sm text-muted-foreground md:text-right bg-muted/30 p-4 rounded-lg border border-border/50">
+                            <div className="font-semibold text-foreground mb-1">ProtoDesign Studios</div>
+                            <a href="mailto:help@protodesignstudios.com" className="flex items-center gap-2 hover:text-primary transition-colors justify-start md:justify-end">
+                                <Mail className="h-3.5 w-3.5" /> help@protodesignstudios.com
+                            </a>
+                            <a href="tel:+918249581682" className="flex items-center gap-2 hover:text-primary transition-colors justify-start md:justify-end">
+                                <Phone className="h-3.5 w-3.5" /> +91 8249581682
+                            </a>
+                        </div>
+                    </div>
+
+                    <Separator className="mb-10" />
+
+                    {/* Policy Content - Prosed for readability */}
+                    <div className="prose prose-slate dark:prose-invert max-w-none space-y-6 text-foreground/90 leading-relaxed">
+                        {children}
+                    </div>
+
+                    {/* Footer for Legal Pages */}
+                    <div className="mt-16 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
+                        <p>© 2026 ProtoDesign Studios. All rights reserved.</p>
+                        <div className="flex gap-6">
+                            <Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy</Link>
+                            <Link to="/terms-and-conditions" className="hover:text-primary transition-colors">Terms</Link>
+                            <Link to="/shipping-policy" className="hover:text-primary transition-colors">Shipping</Link>
+                        </div>
+                    </div>
+                </Card>
+            </div>
+        </div>
+    );
+};
+
+// --- 1. TERMS & CONDITIONS ---
+export const TermsPage = () => (
+    <LegalPageLayout title="Terms & Conditions" lastUpdated="January 12, 2026">
+        <h3>1. Introduction</h3>
+        <p>
+            Welcome to <strong>ProtoDesign Studios</strong>. By accessing our website and using our services, you agree to be bound by these Terms and Conditions.
+            If you do not agree with any part of these terms, please do not use our platform.
+        </p>
+
+        <h3>2. Company Information</h3>
+        <p>
+            The website is owned and operated by <strong>ProtoDesign Studios</strong>, a company incorporated under the laws of India, with its registered office in Indore, Madhya Pradesh.
+        </p>
+
+        <h3>3. Products & Services</h3>
+        <p>
+            We provide 3D printers, filaments, accessories, and custom 3D printing services. We strive to display product colors and specifications accurately; however,
+            we do not guarantee that your device's display will accurately reflect the actual color of the products.
+        </p>
+
+        <h3>4. User Obligations</h3>
+        <p>
+            You agree to provide accurate and current information during registration and checkout. You are responsible for maintaining the confidentiality of your account credentials.
+        </p>
+
+        <h3>5. Governing Law</h3>
+        <p>
+            These Terms shall be governed by and construed in accordance with the laws of India. Any disputes arising out of these terms shall be subject to the exclusive jurisdiction of the courts in Indore, Madhya Pradesh.
+        </p>
+    </LegalPageLayout>
+);
+
+// --- 2. PRIVACY POLICY ---
+export const PrivacyPage = () => (
+    <LegalPageLayout title="Privacy Policy" lastUpdated="January 12, 2026">
+        <h3>1. Information Collection</h3>
+        <p>
+            We collect personal information necessary to fulfill your orders and improve your shopping experience. This includes:
+        </p>
+        <ul className="list-disc pl-5">
+            <li><strong>Identity Data:</strong> Name, Username.</li>
+            <li><strong>Contact Data:</strong> Billing address, Shipping address, Email address, and Phone number (e.g., +91 8249581682).</li>
+            <li><strong>Transaction Data:</strong> Details of products ordered and payment timestamps.</li>
+        </ul>
+
+        <h3>2. How We Use Your Data</h3>
+        <p>
+            Your data is used strictly for:
+        </p>
+        <ul>
+            <li>Processing your orders and managing payments.</li>
+            <li>Delivering products via our logistics partners.</li>
+            <li>Sending order updates, invoices, and support communications.</li>
+        </ul>
+
+        <h3>3. Data Security</h3>
+        <p>
+            We do not store your Credit/Debit card numbers or UPI PINs. All payments are processed through secure, PCI-DSS compliant payment gateways.
+            We implement industry-standard security measures to protect your personal information from unauthorized access.
+        </p>
+
+        <h3>4. Third-Party Sharing</h3>
+        <p>
+            We do not sell your data. We only share necessary details (Name, Address, Phone) with our courier partners (e.g., BlueDart, Delhivery) to facilitate the delivery of your package.
+        </p>
+    </LegalPageLayout>
+);
+
+// --- 3. REFUND POLICY ---
+export const RefundPage = () => (
+    <LegalPageLayout title="Refund Policy" lastUpdated="January 12, 2026">
+        <div className="p-4 bg-primary/10 border-l-4 border-primary rounded-r-md mb-6">
+            <p className="font-medium text-foreground">
+                <strong>Standard Returns:</strong> We accept returns for manufacturing defects reported within 7 days.
+            </p>
+        </div>
+
+        <h3>1. Returns & Replacements</h3>
+        <p>
+            We prioritize quality. Returns or replacements are accepted ONLY under the following conditions:
+        </p>
+        <ul className="list-disc pl-5">
+            <li><strong>Manufacturing Defect:</strong> If the product (3D Printer/Hardware) is found to be defective within <strong>7 days</strong> of delivery.</li>
+            <li><strong>Damage on Arrival:</strong> If the package arrives physically damaged. You must provide an unboxing video as proof within 24 hours.</li>
+            <li><strong>Wrong Product:</strong> If you received an item different from what you ordered.</li>
+        </ul>
+
+        <h3>2. Custom 3D Printing</h3>
+        <p>
+            Due to the personalized nature of Custom 3D Printing services, these orders are <strong>non-refundable</strong> unless the printed part is broken upon arrival or significantly deviates from the design file provided.
+        </p>
+
+        <h3>3. Cancellation Policy</h3>
+        <p>
+            Orders can be cancelled within <strong>12 hours</strong> of placement if they have not yet been dispatched. Once shipped, orders cannot be cancelled.
+        </p>
+
+        <h3>4. Refund Timeline</h3>
+        <p>
+            Once a return is approved and the item is received at our warehouse, refunds are initiated within 48 hours. The amount will reflect in your original payment source within <strong>5-7 working days</strong>.
+        </p>
+    </LegalPageLayout>
+);
+
+// --- 4. SHIPPING POLICY ---
+export const ShippingPage = () => (
+    <LegalPageLayout title="Shipping Policy" lastUpdated="January 12, 2026">
+        <h3>1. Order Processing</h3>
+        <p>
+            All in-stock orders (Printers, Filaments, Accessories) are processed and dispatched within <strong>2-3 business days</strong>.
+            Custom 3D printing orders may take additional time for production, which will be communicated at the time of order.
+        </p>
+
+        <h3>2. Delivery Timelines</h3>
+        <p>
+            We ship via reputed courier partners to ensure safe delivery. Standard delivery estimates are:
+        </p>
+        <ul className="list-disc pl-5">
+            <li><strong>Metro Cities:</strong> 3-5 Working Days</li>
+            <li><strong>Rest of India:</strong> 5-7 Working Days</li>
+            <li><strong>Remote / North East:</strong> 7-10 Working Days</li>
+        </ul>
+
+        <h3>3. Shipping Costs</h3>
+        <p>
+            Shipping charges are calculated at checkout based on the total weight of the package and your destination pincode.
+        </p>
+
+        <h3>4. Tracking</h3>
+        <p>
+            Once your order is shipped, you will receive a tracking link via email (help@protodesignstudios.com) and SMS to track your package in real-time.
+        </p>
+    </LegalPageLayout>
+);

@@ -1,0 +1,88 @@
+import { Link } from "react-router-dom";
+import { Separator } from "@/components/ui/separator.tsx";
+import { Mail, Phone, MapPin, Facebook, Instagram, Twitter } from "lucide-react";
+
+export const Footer = () => {
+    return (
+        <footer className="bg-secondary/20 border-t border-border mt-auto">
+            <div className="container mx-auto px-4 py-12">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+
+                    {/* Column 1: Brand */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <div className="relative w-8 h-8 bg-gradient-to-br from-yellow-400 via-red-500 to-primary rounded-lg flex items-center justify-center text-white font-bold">
+                                P
+                            </div>
+                            <span className="font-display text-lg font-bold">ProtoDesign</span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed">
+                            Empowering creators with premium 3D printing solutions. From high-end printers to custom prototyping services.
+                        </p>
+                    </div>
+
+                    {/* Column 2: Quick Links */}
+                    <div>
+                        <h3 className="font-semibold mb-4">Shop</h3>
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                            <li><Link to="/printers" className="hover:text-primary transition-colors">3D Printers</Link></li>
+                            <li><Link to="/filaments" className="hover:text-primary transition-colors">Filaments</Link></li>
+                            <li><Link to="/resins" className="hover:text-primary transition-colors">Resins</Link></li>
+                            <li><Link to="/custom" className="hover:text-primary transition-colors">Custom Printing</Link></li>
+                        </ul>
+                    </div>
+
+                    {/* Column 3: Legal & Support */}
+                    <div>
+                        <h3 className="font-semibold mb-4">Support</h3>
+                        <ul className="space-y-2 text-sm text-muted-foreground">
+                            <li><Link to="/orders" className="hover:text-primary transition-colors">Track Order</Link></li>
+                            <li><Link to="/terms-and-conditions" className="hover:text-primary transition-colors">Terms & Conditions</Link></li>
+                            <li><Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
+                            <li><Link to="/refund-policy" className="hover:text-primary transition-colors">Refund Policy</Link></li>
+                            <li><Link to="/shipping-policy" className="hover:text-primary transition-colors">Shipping Policy</Link></li>
+                        </ul>
+                    </div>
+
+                    {/* Column 4: Contact */}
+                    <div>
+                        <h3 className="font-semibold mb-4">Contact Us</h3>
+                        <ul className="space-y-3 text-sm text-muted-foreground">
+                            <li className="flex items-center gap-2">
+                                <Mail className="w-4 h-4 text-primary" />
+                                <a href="mailto:help@protodesignstudios.com" className="hover:text-primary">help@protodesignstudios.com</a>
+                            </li>
+                            <li className="flex items-center gap-2">
+                                <Phone className="w-4 h-4 text-primary" />
+                                <a href="tel:+918249581682" className="hover:text-primary">+91 8249581682</a>
+                            </li>
+                            <li className="flex items-start gap-2">
+                                <MapPin className="w-4 h-4 text-primary mt-0.5" />
+                                <span>Indore, Madhya Pradesh, India</span>
+                            </li>
+                        </ul>
+                        {/* Social Icons */}
+                        <div className="flex gap-4 mt-4">
+                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
+                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Twitter className="w-4 h-4" /></a>
+                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
+                        </div>
+                    </div>
+                </div>
+
+                <Separator className="my-8" />
+
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
+                    <p>© 2026 ProtoDesign Studios. All rights reserved.</p>
+                    <div className="flex gap-4">
+                        <span>Secure Payments</span>
+                        <span>•</span>
+                        <span>Fast Delivery</span>
+                        <span>•</span>
+                        <span>Quality Support</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    );
+};
