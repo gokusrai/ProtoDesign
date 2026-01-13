@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Separator } from "@/components/ui/separator.tsx";
-import { Mail, Phone, MapPin, Facebook, Instagram, Twitter, Linkedin } from "lucide-react";
+import { Mail, Phone, MapPin, Facebook, Instagram, Youtube } from "lucide-react";
 import {Logo} from "@/components/Logo.tsx";
 
 function LinkedIn(props: { className: string }) {
@@ -48,7 +48,7 @@ export const Footer = () => {
                             <li><Link to="/orders" className="hover:text-primary transition-colors">Track Order</Link></li>
                             <li><Link to="/terms-and-conditions" className="hover:text-primary transition-colors">Terms & Conditions</Link></li>
                             <li><Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
-                            <li><Link to="/refund-policy" className="hover:text-primary transition-colors">Refund Policy</Link></li>
+                            <li><Link to="/refund-policy" className="hover:text-primary transition-colors">Return & Refund Policy</Link></li>
                             <li><Link to="/shipping-policy" className="hover:text-primary transition-colors">Shipping Policy</Link></li>
                             <li><Link to="/contact" className="hover:text-primary transition-colors">Contact Us</Link></li>
                         </ul>
@@ -74,7 +74,7 @@ export const Footer = () => {
                         {/* Social Icons */}
                         <div className="flex gap-4 mt-4">
                             <a href="https://www.instagram.com/protodesignstudio.3d/" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
-                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Linkedin className="w-4 h-4" /></a>
+                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Youtube className="w-4 h-4" /></a>
                             <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
                         </div>
                     </div>

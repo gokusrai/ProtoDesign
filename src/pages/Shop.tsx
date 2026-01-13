@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from 'sonner';
 import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star } from 'lucide-react';
 import { apiService } from '@/services/api.service';
-import { useCart } from '@/contexts/CartContext';
+import { useCart } from "@/hooks/use-cart";
 import ProductImageCarousel from '@/components/ProductImageCarousel';
 import { formatINR } from '@/lib/currency';
 

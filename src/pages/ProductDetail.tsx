@@ -23,7 +23,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiService } from "@/services/api.service";
-import { useCart } from "@/contexts/CartContext";
+import { useCart } from "@/hooks/use-cart";
 import { formatINR } from "@/lib/currency";
 import { motion, AnimatePresence } from "framer-motion";
 

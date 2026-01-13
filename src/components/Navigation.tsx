@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { apiService } from "@/services/api.service";
-import { useCart } from "@/contexts/CartContext";
+import { useCart } from "@/hooks/use-cart";
 import {
     DropdownMenu,
     DropdownMenuContent,

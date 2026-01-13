@@ -132,7 +132,7 @@ export const PrivacyPage = () => (
 
 // --- 3. REFUND POLICY ---
 export const RefundPage = () => (
-    <LegalPageLayout title="Refund Policy" lastUpdated="January 12, 2026">
+    <LegalPageLayout title="Return & Refund Policy" lastUpdated="January 12, 2026">
         <div className="p-4 bg-primary/10 border-l-4 border-primary rounded-r-md mb-6">
             <p className="font-medium text-foreground">
                 <strong>Standard Returns:</strong> We accept returns for manufacturing defects reported within 7 days.
@@ -217,8 +217,8 @@ export const ContactPage = () => (
 
             <div className="p-6 border rounded-lg bg-muted/20 md:col-span-2">
                 <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><MapPin className="w-5 h-5 text-primary"/> Registered Office</h4>
-                <p>[ENTER YOUR FULL STREET ADDRESS HERE]</p>
-                <p>Indore, Madhya Pradesh, [453331]</p>
+                <p>I2, Gymnasia, Almas Amber, Kanupriya Nagar, Rau</p>
+                <p>Indore, Madhya Pradesh, 453331</p>
                 <p>India</p>
             </div>
         </div>
