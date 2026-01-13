@@ -71,23 +71,31 @@ export const TermsPage = () => (
             If you do not agree with any part of these terms, please do not use our platform.
         </p>
 
-        <h3>2. Company Information</h3>
+        <h3>2. Legal Entity Declaration</h3>
         <p>
-            The website is owned and operated by <strong>ProtoDesign Studios</strong>, a company incorporated under the laws of India, with its registered office in Indore, Madhya Pradesh.
+            "ProtoDesign Studios" is a brand property owned and operated by <strong>Zon Robotics and AI Pvt. Ltd.</strong><br/>
+            All invoices and payments will be processed under the name of <strong>Zon Robotics and AI Pvt. Ltd.</strong></p>
+
+        <h3>3. Company Information</h3>
+        <p>
+            <strong>Registered Office:</strong><br/>
+            Zon Robotics and AI Pvt. Ltd.<br/>
+            I2, Gymnasia, Almas Amber, Kanupriya Nagar, Rau<br/>
+            Indore, Madhya Pradesh, 453331, India.
         </p>
 
-        <h3>3. Products & Services</h3>
+        <h3>4. Products & Services</h3>
         <p>
             We provide 3D printers, filaments, accessories, and custom 3D printing services. We strive to display product colors and specifications accurately; however,
             we do not guarantee that your device's display will accurately reflect the actual color of the products.
         </p>
 
-        <h3>4. User Obligations</h3>
+        <h3>5. User Obligations</h3>
         <p>
             You agree to provide accurate and current information during registration and checkout. You are responsible for maintaining the confidentiality of your account credentials.
         </p>
 
-        <h3>5. Governing Law</h3>
+        <h3>6. Governing Law</h3>
         <p>
             These Terms shall be governed by and construed in accordance with the laws of India. Any disputes arising out of these terms shall be subject to the exclusive jurisdiction of the courts in Indore, Madhya Pradesh.
         </p>
