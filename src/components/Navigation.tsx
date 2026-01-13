@@ -25,6 +25,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {Logo} from "@/components/Logo.tsx";
 
 interface UserInfo {
     id: string;
@@ -115,12 +116,7 @@ export const Navigation = () => {
 
                     {/* Logo */}
                     <Link to="/" className="flex items-center gap-2 group">
-                        <div className="relative w-9 h-9">
-                            <div className="absolute inset-0 bg-gradient-to-br from-yellow-400 via-red-500 to-primary rounded-lg transform rotate-6 opacity-80 group-hover:rotate-12 transition-transform"></div>
-                            <div className="absolute inset-0 bg-background border border-border rounded-lg flex items-center justify-center text-lg font-bold text-primary shadow-sm">
-                                P
-                            </div>
-                        </div>
+                        <Logo className="w-10 h-10" /> {/* Slightly larger to show detail */}
                         <span className="font-display text-xl font-bold text-foreground">
                             ProtoDesign
                         </span>

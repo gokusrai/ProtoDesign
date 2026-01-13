@@ -1,6 +1,11 @@
 import { Link } from "react-router-dom";
 import { Separator } from "@/components/ui/separator.tsx";
-import { Mail, Phone, MapPin, Facebook, Instagram, Twitter } from "lucide-react";
+import { Mail, Phone, MapPin, Facebook, Instagram, Twitter, Linkedin } from "lucide-react";
+import {Logo} from "@/components/Logo.tsx";
+
+function LinkedIn(props: { className: string }) {
+    return null;
+}
 
 export const Footer = () => {
     return (
@@ -11,10 +16,14 @@ export const Footer = () => {
                     {/* Column 1: Brand */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-2">
-                            <div className="relative w-8 h-8 bg-gradient-to-br from-yellow-400 via-red-500 to-primary rounded-lg flex items-center justify-center text-white font-bold">
-                                P
-                            </div>
-                            <span className="font-display text-lg font-bold">ProtoDesign</span>
+                            {/* Logo */}
+                            <Link to="/" className="flex items-center gap-2 group">
+                                <Logo className="w-10 h-10" /> {/* Slightly larger to show detail */}
+                                <span className="font-display text-xl font-bold text-foreground">
+                                    ProtoDesign
+                                </span>
+                            </Link>
+
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">
                             Empowering creators with premium 3D printing solutions. From high-end printers to custom prototyping services.
@@ -41,6 +50,7 @@ export const Footer = () => {
                             <li><Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
                             <li><Link to="/refund-policy" className="hover:text-primary transition-colors">Refund Policy</Link></li>
                             <li><Link to="/shipping-policy" className="hover:text-primary transition-colors">Shipping Policy</Link></li>
+                            <li><Link to="/contact" className="hover:text-primary transition-colors">Contact Us</Link></li>
                         </ul>
                     </div>
 
@@ -63,8 +73,8 @@ export const Footer = () => {
                         </ul>
                         {/* Social Icons */}
                         <div className="flex gap-4 mt-4">
-                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
-                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Twitter className="w-4 h-4" /></a>
+                            <a href="https://www.instagram.com/protodesignstudio.3d/" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
+                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Linkedin className="w-4 h-4" /></a>
                             <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
                         </div>
                     </div>
@@ -73,7 +83,7 @@ export const Footer = () => {
                 <Separator className="my-8" />
 
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
-                    <p>© 2026 ProtoDesign Studios. All rights reserved.</p>
+                    <p>© 2025 Zon Robotics and AI Pvt. Ltd. All rights reserved.</p>
                     <div className="flex gap-4">
                         <span>Secure Payments</span>
                         <span>•</span>

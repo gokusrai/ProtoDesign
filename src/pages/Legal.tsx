@@ -49,7 +49,7 @@ const LegalPageLayout = ({ title, lastUpdated, children }: { title: string, last
 
                     {/* Footer for Legal Pages */}
                     <div className="mt-16 pt-8 border-t border-border flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
-                        <p>© 2026 ProtoDesign Studios. All rights reserved.</p>
+                        <p>© 2025 Zon Robotics and AI Pvt. Ltd. All rights reserved.</p>
                         <div className="flex gap-6">
                             <Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy</Link>
                             <Link to="/terms-and-conditions" className="hover:text-primary transition-colors">Terms</Link>
@@ -194,5 +194,33 @@ export const ShippingPage = () => (
         <p>
             Once your order is shipped, you will receive a tracking link via email (help@protodesignstudios.com) and SMS to track your package in real-time.
         </p>
+    </LegalPageLayout>
+);
+
+// --- 5. CONTACT US (Added for PhonePe Requirement) ---
+export const ContactPage = () => (
+    <LegalPageLayout title="Contact Us" lastUpdated="January 12, 2026">
+        <p>We are here to help! Reach out to us via:</p>
+
+        <div className="grid gap-6 md:grid-cols-2 mt-8">
+            <div className="p-6 border rounded-lg bg-muted/20">
+                <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><Phone className="w-5 h-5 text-primary"/> Phone</h4>
+                <p>+91 8249581682</p>
+                <p className="text-sm text-muted-foreground">Mon-Sat, 10 AM - 7 PM</p>
+            </div>
+
+            <div className="p-6 border rounded-lg bg-muted/20">
+                <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><Mail className="w-5 h-5 text-primary"/> Email</h4>
+                <p>help@protodesignstudios.com</p>
+                <p className="text-sm text-muted-foreground">Response within 24 hours</p>
+            </div>
+
+            <div className="p-6 border rounded-lg bg-muted/20 md:col-span-2">
+                <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><MapPin className="w-5 h-5 text-primary"/> Registered Office</h4>
+                <p>[ENTER YOUR FULL STREET ADDRESS HERE]</p>
+                <p>Indore, Madhya Pradesh, [453331]</p>
+                <p>India</p>
+            </div>
+        </div>
     </LegalPageLayout>
 );

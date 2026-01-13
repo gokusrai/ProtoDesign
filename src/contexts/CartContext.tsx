@@ -16,25 +16,6 @@ export interface CartItem {
     };
 }
 
-// interface CartContextType {
-//     items: CartItem[];
-//     loading: boolean;
-//     addToCart: (productId: {
-//         name: string;
-//         price: number;
-//         quantity: number;
-//         material: "PLA" | "ABS" | "PETG" | "TPU" | "Nylon" | "Wood Fill" | "Carbon Fiber" | "Resin";
-//         dimensions: { length: number; width: number; height: number };
-//         isCustom: boolean
-//     }, quantity?: number) => Promise<void>;
-//     removeFromCart: (productId: string) => Promise<void>;
-//     updateQuantity: (productId: string, quantity: number) => Promise<void>;
-//     clearCart: () => Promise<void>;
-//     total: number;
-//     itemCount: number;
-//     isAuthenticated: boolean;
-// }
-
 interface CartContextType {
     items: CartItem[];
     loading: boolean;
@@ -48,8 +29,6 @@ interface CartContextType {
     loadCart: () => Promise<void>;  // ✅ ADD THIS LINE
 }
 
-
-
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,9 +37,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
     // Load cart from backend when authenticated
-    const loadCart = useCallback(async () => {
+    const loadCart = useCallback(async (silent = false) => {
         try {
-            setLoading(true);
+            // Only show spinner if NOT silent (e.g., first load)
+            if (!silent) setLoading(true);
+
             const response = await apiService.getCart();
             setItems(response.data?.items || []);
             setIsAuthenticated(true);
@@ -69,7 +50,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setItems([]);
             setIsAuthenticated(false);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
@@ -106,7 +87,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const addToCart = async (productId: string, quantity: number = 1) => {
         try {
             await apiService.addToCart(productId, quantity);
-            await loadCart();
+            await loadCart(true);
             toast.success('Added to cart!');
         } catch (error: any) {
             toast.error(error.message || 'Failed to add to cart');
@@ -119,8 +100,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return;
         }
         try {
+            setItems(prev => prev.map(item =>
+                item.product_id === productId ? { ...item, quantity } : item
+            ));
+
             await apiService.updateCartItem(productId, quantity);
-            await loadCart();
+            await loadCart(true);
         } catch (error: any) {
             toast.error('Failed to update cart');
         }
@@ -129,7 +114,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const removeFromCart = async (productId: string) => {
         try {
             await apiService.removeFromCart(productId);
-            await loadCart();
+            await loadCart(true);
             toast.success('Removed from cart');
         } catch (error: any) {
             toast.error('Failed to remove from cart');

@@ -20,8 +20,9 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Profile from "./pages/Profile";
 import BulkUpload from "./pages/BulkUpload.tsx";
-import { TermsPage, PrivacyPage, RefundPage, ShippingPage } from "@/pages/Legal.tsx";
+import { TermsPage, PrivacyPage, RefundPage, ShippingPage, ContactPage } from "@/pages/Legal.tsx";
 import { Footer } from "@/components/Footer"; // ✅ 1. Import Footer
+import ScrollToTop from "@/components/ScrollToTop";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
                 <Toaster />
                 <Sonner />
                 <BrowserRouter>
+                    <ScrollToTop />
                     {/* Main Layout Wrapper */}
                     <div className="flex flex-col min-h-screen">
                         <Navigation />
@@ -123,6 +125,7 @@ const App = () => (
                                 <Route path="/privacy-policy" element={<PrivacyPage />} />
                                 <Route path="/refund-policy" element={<RefundPage />} />
                                 <Route path="/shipping-policy" element={<ShippingPage />} />
+                                <Route path="/contact" element={<ContactPage />} />
 
                                 {/* 404 Not Found (Must be last) */}
                                 <Route path="*" element={<NotFound />} />
