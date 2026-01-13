@@ -30,9 +30,9 @@ const LegalPageLayout = ({ title, lastUpdated, children }: { title: string, last
 
                         {/* Trust/Contact Block */}
                         <div className="flex flex-col gap-2 text-sm text-muted-foreground md:text-right bg-muted/30 p-4 rounded-lg border border-border/50">
-                            <div className="font-semibold text-foreground mb-1">ProtoDesign Studios</div>
-                            <a href="mailto:help@protodesignstudios.com" className="flex items-center gap-2 hover:text-primary transition-colors justify-start md:justify-end">
-                                <Mail className="h-3.5 w-3.5" /> help@protodesignstudios.com
+                            <div className="font-semibold text-foreground mb-1">ProtoDesign Studio</div>
+                            <a href="mailto:help@protodesignstudio.com" className="flex items-center gap-2 hover:text-primary transition-colors justify-start md:justify-end">
+                                <Mail className="h-3.5 w-3.5" /> help@protodesignstudio.com
                             </a>
                             <a href="tel:+918249581682" className="flex items-center gap-2 hover:text-primary transition-colors justify-start md:justify-end">
                                 <Phone className="h-3.5 w-3.5" /> +91 8249581682
@@ -67,13 +67,13 @@ export const TermsPage = () => (
     <LegalPageLayout title="Terms & Conditions" lastUpdated="January 12, 2026">
         <h3>1. Introduction</h3>
         <p>
-            Welcome to <strong>ProtoDesign Studios</strong>. By accessing our website and using our services, you agree to be bound by these Terms and Conditions.
+            Welcome to <strong>ProtoDesign Studio</strong>. By accessing our website and using our services, you agree to be bound by these Terms and Conditions.
             If you do not agree with any part of these terms, please do not use our platform.
         </p>
 
         <h3>2. Legal Entity Declaration</h3>
         <p>
-            "ProtoDesign Studios" is a brand property owned and operated by <strong>Zon Robotics and AI Pvt. Ltd.</strong><br/>
+            "ProtoDesign Studio" is a brand property owned and operated by <strong>Zon Robotics and AI Pvt. Ltd.</strong><br/>
             All invoices and payments will be processed under the name of <strong>Zon Robotics and AI Pvt. Ltd.</strong></p>
 
         <h3>3. Company Information</h3>
@@ -200,7 +200,7 @@ export const ShippingPage = () => (
 
         <h3>4. Tracking</h3>
         <p>
-            Once your order is shipped, you will receive a tracking link via email (help@protodesignstudios.com) and SMS to track your package in real-time.
+            Once your order is shipped, you will receive a tracking link via email (help@protodesignstudio.com) and SMS to track your package in real-time.
         </p>
     </LegalPageLayout>
 );
@@ -219,7 +219,7 @@ export const ContactPage = () => (
 
             <div className="p-6 border rounded-lg bg-muted/20">
                 <h4 className="font-semibold text-lg mb-2 flex items-center gap-2"><Mail className="w-5 h-5 text-primary"/> Email</h4>
-                <p>help@protodesignstudios.com</p>
+                <p>help@protodesignstudio.com</p>
                 <p className="text-sm text-muted-foreground">Response within 24 hours</p>
             </div>
 

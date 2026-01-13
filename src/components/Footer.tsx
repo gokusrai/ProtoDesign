@@ -60,7 +60,7 @@ export const Footer = () => {
                         <ul className="space-y-3 text-sm text-muted-foreground">
                             <li className="flex items-center gap-2">
                                 <Mail className="w-4 h-4 text-primary" />
-                                <a href="mailto:help@protodesignstudios.com" className="hover:text-primary">help@protodesignstudios.com</a>
+                                <a href="mailto:help@protodesignstudio.com" className="hover:text-primary">help@protodesignstudio.com</a>
                             </li>
                             <li className="flex items-center gap-2">
                                 <Phone className="w-4 h-4 text-primary" />
@@ -74,8 +74,8 @@ export const Footer = () => {
                         {/* Social Icons */}
                         <div className="flex gap-4 mt-4">
                             <a href="https://www.instagram.com/protodesignstudio.3d/" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
-                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Youtube className="w-4 h-4" /></a>
-                            <a href="#" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
+                            <a href="https://www.youtube.com/@ProtoDesignStudio3d" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Youtube className="w-4 h-4" /></a>
+                            <a href="https://www.facebook.com/profile.php?id=61586266060055" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
                         </div>
                     </div>
                 </div>
