@@ -311,7 +311,8 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
         const { name, description, short_description, price, category, stock, specifications } = req.body;
         let videoUrl = null;
 
-        if (req.files['video']) {
+        // ✅ FIXED: Check if req.files exists
+        if (req.files && req.files['video']) {
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
@@ -321,7 +322,8 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             [name, description, short_description, price, category, stock, specifications, videoUrl]
         );
 
-        if (req.files['images']) {
+        // ✅ FIXED: Check if req.files exists
+        if (req.files && req.files['images']) {
             for (let i = 0; i < req.files['images'].length; i++) {
                 const url = await storageService.uploadFile(req.files['images'][i], 'products');
                 await db.none(
@@ -346,7 +348,8 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             [name, description, short_description, price, category, stock, specifications, req.params.id]
         );
 
-        if (req.files['video']) {
+        // ✅ FIXED: Check if req.files exists
+        if (req.files && req.files['video']) {
             const videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
             await db.none('UPDATE products SET video_url = $1 WHERE id = $2', [videoUrl, req.params.id]);
         }
@@ -357,7 +360,8 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             if (idsToDelete.length > 0) await db.none('DELETE FROM product_images WHERE id IN ($1:csv)', [idsToDelete]);
         }
 
-        if (req.files['images']) {
+        // ✅ FIXED: Check if req.files exists
+        if (req.files && req.files['images']) {
             const maxOrdResult = await db.one('SELECT COALESCE(MAX(display_order), -1) as m FROM product_images WHERE product_id=$1', [req.params.id]);
             let nextOrder = maxOrdResult.m + 1;
             for (const file of req.files['images']) {

@@ -1,7 +1,9 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom"; // ✅ Imported useSearchParams
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
     Loader2,
     ShoppingCart,
@@ -18,14 +20,24 @@ import {
     ArrowRight,
     Headset,
     MapPin,
-    Play
+    Play,
+    Save,
+    X,
+    Undo,
+    Redo,
+    Trash2,
+    Upload,
+    ImagePlus,
+    Video,
+    RefreshCcw,
+    GripVertical
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { apiService } from "@/services/api.service";
 import { useCart } from "@/hooks/use-cart";
 import { formatINR } from "@/lib/currency";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder } from "framer-motion";
 
 // --- INTERFACES ---
 interface ProductImage {
@@ -50,7 +62,7 @@ interface Product {
     likes_count?: number;
     average_rating?: number;
     review_count?: number;
-    specifications?: Record<string, string>;
+    specifications?: Record<string, string> | Array<{ key: string; value: string }>;
     video_url?: string | null;
 }
 
@@ -62,7 +74,31 @@ interface Review {
     created_at: string;
 }
 
-// --- HELPER: Category Mapping for Explore Button ---
+// --- EDITING INTERFACES ---
+interface EditableSpec {
+    id: string;
+    key: string;
+    value: string;
+}
+
+interface EditableProductState {
+    name: string;
+    description: string;
+    short_description: string;
+    price: number;
+    stock: number;
+    category: string;
+    sub_category: string;
+    specificationsArray: EditableSpec[];
+    currentImages: ProductImage[];
+    deletedImageIds: string[];
+    newImageFiles: File[];
+    newImagePreviews: string[];
+    videoFile: File | null;
+    videoPreview: string | null;
+    deleteVideo: boolean;
+}
+
 const CATEGORY_ROUTES: Record<string, string> = {
     '3d_printer': '/printers',
     '3dprintables': '/printables',
@@ -71,8 +107,6 @@ const CATEGORY_ROUTES: Record<string, string> = {
     'accessory': '/accessories',
     'spare_part': '/spare-parts'
 };
-
-// --- HELPER COMPONENTS ---
 
 const StarRating = ({ rating, interactive = false, onRate, size = 16 }: { rating: number, interactive?: boolean, onRate?: (r: number) => void, size?: number }) => {
     const [hover, setHover] = useState(0);
@@ -93,7 +127,6 @@ const StarRating = ({ rating, interactive = false, onRate, size = 16 }: { rating
     );
 };
 
-// Fixed Image Magnifier
 const ImageMagnifier = ({ src }: { src: string }) => {
     const [showZoom, setShowZoom] = useState(false);
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -144,6 +177,7 @@ const ImageMagnifier = ({ src }: { src: string }) => {
 const ProductDetail = () => {
     const { productId } = useParams<{ productId: string }>();
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams(); // ✅ Get Search Params
     const { addToCart } = useCart();
 
     // Data State
@@ -156,28 +190,59 @@ const ProductDetail = () => {
     const [quantity, setQuantity] = useState(1);
     const [activeImage, setActiveImage] = useState<string>("");
 
+    // Admin & Editing State
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+
+    // Undo/Redo History State
+    const [editState, setEditState] = useState<EditableProductState | null>(null);
+    const [history, setHistory] = useState<EditableProductState[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+    const [isSaving, setIsSaving] = useState(false);
+
     // Review Logic
     const [isReviewFormOpen, setIsReviewFormOpen] = useState(false);
     const [newReview, setNewReview] = useState({ rating: 0, comment: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Review Filters & Pagination
     const [reviewFilter, setReviewFilter] = useState("recent");
     const [reviewPage, setReviewPage] = useState(1);
     const REVIEWS_PER_PAGE = 6;
 
     const [isAddingToCart, setIsAddingToCart] = useState(false);
 
-    // --- INITIAL DATA FETCH ---
+    const normalizeSpecs = useCallback((specs: any): Array<{ key: string, value: string }> => {
+        if (!specs) return [];
+        if (Array.isArray(specs)) return specs;
+        return Object.entries(specs).map(([key, value]) => ({ key, value: String(value) }));
+    }, []);
+
+    // --- INITIAL DATA FETCH & ADMIN CHECK ---
     useEffect(() => {
+        const checkAdmin = async () => {
+            try {
+                if (apiService.isAuthenticated()) {
+                    const user = await apiService.getCurrentUser();
+                    if (user.role === 'admin' || user.user?.role === 'admin') {
+                        setIsAdmin(true);
+                        return true;
+                    }
+                }
+            } catch (e) {
+                console.error("Auth check failed", e);
+            }
+            return false;
+        };
+
         const loadData = async () => {
             try {
                 if (!productId) { navigate("/shop"); return; }
                 setLoading(true);
 
+                const adminStatus = await checkAdmin();
+
                 // 1. Get Product
                 const productRes = await apiService.getProduct(productId);
-                // Handle both raw object and { data: object } format
                 const fetchedProduct = productRes.data || productRes;
                 setProduct(fetchedProduct);
 
@@ -191,37 +256,15 @@ const ProductDetail = () => {
                 // 2. Get Reviews
                 try {
                     const reviewRes = await apiService.getProductReviews(productId);
-                    // ✅ FIXED: Correctly handle array response
                     const reviewsData = Array.isArray(reviewRes) ? reviewRes : (reviewRes.data || []);
                     setReviews(reviewsData);
                 } catch (e) { console.error("Failed to load reviews"); }
 
-                // 3. Get Related Products (Alternating Logic)
+                // 3. Get Related Products
                 if (fetchedProduct.category) {
                     const categoryRes = await apiService.getProducts(fetchedProduct.category);
                     const catProducts = (categoryRes.data || []).filter((p: Product) => p.id !== fetchedProduct.id);
-
-                    // Simulate "Keyword Match"
-                    const keywordRes = await apiService.getProducts(null, null, );
-                    const keywordProducts = (keywordRes.data || []).filter((p: Product) => p.id !== fetchedProduct.id);
-
-                    // Interleave: [Cat1, Key1, Cat2, Key2...]
-                    const combined: Product[] = [];
-                    const maxLen = Math.max(catProducts.length, keywordProducts.length);
-                    const addedIds = new Set();
-
-                    for (let i = 0; i < maxLen; i++) {
-                        if (i < catProducts.length && !addedIds.has(catProducts[i].id)) {
-                            combined.push(catProducts[i]);
-                            addedIds.add(catProducts[i].id);
-                        }
-                        if (i < keywordProducts.length && !addedIds.has(keywordProducts[i].id)) {
-                            combined.push(keywordProducts[i]);
-                            addedIds.add(keywordProducts[i].id);
-                        }
-                        if (combined.length >= 10) break;
-                    }
-                    setRelatedProducts(combined.slice(0, 10));
+                    setRelatedProducts(catProducts.slice(0, 10));
                 }
 
                 window.scrollTo(0, 0);
@@ -235,13 +278,229 @@ const ProductDetail = () => {
         loadData();
     }, [productId, navigate]);
 
-    // --- HANDLERS ---
+    // ✅ AUTO EDIT EFFECT
+    useEffect(() => {
+        if (product && isAdmin && searchParams.get('edit') === 'true' && !isEditing) {
+            startEditing();
+            // Clear the param so refreshing doesn't stick in edit mode if user cancels
+            setSearchParams({}, { replace: true });
+        }
+    }, [product, isAdmin, searchParams]);
+
+
+    // --- EDITING LOGIC ---
+
+    const startEditing = () => {
+        // Since startEditing is called inside useEffect depending on 'product',
+        // we can safely access product here, but we need to guard it or use the ref from state
+        // To be safe in a closure, we use the functional update or check state.
+        // But since this function is recreated on render, `product` variable is fresh.
+        if (!product) return;
+
+        const specsArray: EditableSpec[] = normalizeSpecs(product.specifications).map((item) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            key: item.key,
+            value: item.value
+        }));
+
+        const initialState: EditableProductState = {
+            name: product.name,
+            description: product.description,
+            short_description: product.short_description || '',
+            price: product.price,
+            stock: product.stock,
+            category: product.category,
+            sub_category: product.sub_category || '',
+            specificationsArray: specsArray,
+            currentImages: product.product_images || [],
+            deletedImageIds: [],
+            newImageFiles: [],
+            newImagePreviews: [],
+            videoFile: null,
+            videoPreview: null,
+            deleteVideo: false
+        };
+
+        setEditState(initialState);
+        setHistory([initialState]);
+        setHistoryIndex(0);
+        setIsEditing(true);
+    };
+
+    const updateEditState = useCallback((newState: Partial<EditableProductState>) => {
+        setEditState((prev) => {
+            if (!prev) return null;
+            const updated = { ...prev, ...newState };
+
+            const newHistory = history.slice(0, historyIndex + 1);
+            newHistory.push(updated);
+            setHistory(newHistory);
+            setHistoryIndex(newHistory.length - 1);
+
+            return updated;
+        });
+    }, [history, historyIndex]);
+
+    const handleUndo = () => {
+        if (historyIndex > 0) {
+            setHistoryIndex(historyIndex - 1);
+            setEditState(history[historyIndex - 1]);
+        }
+    };
+
+    const handleRedo = () => {
+        if (historyIndex < history.length - 1) {
+            setHistoryIndex(historyIndex + 1);
+            setEditState(history[historyIndex + 1]);
+        }
+    };
+
+    const cancelEditing = () => {
+        if (editState) {
+            editState.newImagePreviews.forEach(url => URL.revokeObjectURL(url));
+            if (editState.videoPreview) URL.revokeObjectURL(editState.videoPreview);
+        }
+        setIsEditing(false);
+        setEditState(null);
+        setHistory([]);
+    };
+
+    const saveChanges = async () => {
+        if (!product || !editState) return;
+        setIsSaving(true);
+        try {
+            const specsToSave = editState.specificationsArray.map(({ key, value }) => ({ key, value }));
+
+            const formData = new FormData();
+            formData.append('name', editState.name);
+            formData.append('description', editState.description);
+            formData.append('short_description', editState.short_description);
+            formData.append('price', String(editState.price));
+            formData.append('stock', String(editState.stock));
+            formData.append('category', editState.category);
+            formData.append('sub_category', editState.sub_category);
+            formData.append('specifications', JSON.stringify(specsToSave));
+
+            if (editState.deletedImageIds.length > 0) {
+                formData.append('imagesToDelete', JSON.stringify(editState.deletedImageIds));
+            }
+
+            editState.newImageFiles.forEach(file => {
+                formData.append('images', file);
+            });
+
+            if (editState.videoFile) {
+                formData.append('video', editState.videoFile);
+            }
+            if (editState.deleteVideo && !editState.videoFile) {
+                formData.append('delete_video', 'true');
+            }
+
+            await apiService.updateProduct(product.id, formData);
+            toast.success("Product updated successfully!");
+            window.location.reload();
+        } catch (error: any) {
+            toast.error(error.message || "Failed to update product");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSpecChange = (id: string, field: 'key' | 'value', text: string) => {
+        if (!editState) return;
+        const newArray = editState.specificationsArray.map(item =>
+            item.id === id ? { ...item, [field]: text } : item
+        );
+        updateEditState({ specificationsArray: newArray });
+    };
+
+    const handleAddSpec = () => {
+        if (!editState) return;
+        const newSpec: EditableSpec = {
+            id: Math.random().toString(36).substr(2, 9),
+            key: "",
+            value: ""
+        };
+        updateEditState({ specificationsArray: [...editState.specificationsArray, newSpec] });
+    };
+
+    const handleRemoveSpec = (id: string) => {
+        if (!editState) return;
+        const newArray = editState.specificationsArray.filter(item => item.id !== id);
+        updateEditState({ specificationsArray: newArray });
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || !editState) return;
+        const files = Array.from(e.target.files);
+        const previews = files.map(f => URL.createObjectURL(f));
+
+        updateEditState({
+            newImageFiles: [...editState.newImageFiles, ...files],
+            newImagePreviews: [...editState.newImagePreviews, ...previews]
+        });
+    };
+
+    const handleDeleteExistingImage = (imageId: string) => {
+        if (!editState) return;
+        updateEditState({
+            currentImages: editState.currentImages.filter(img => img.id !== imageId),
+            deletedImageIds: [...editState.deletedImageIds, imageId]
+        });
+    };
+
+    const handleDeleteNewImage = (index: number) => {
+        if (!editState) return;
+        const newFiles = [...editState.newImageFiles];
+        const newPreviews = [...editState.newImagePreviews];
+        URL.revokeObjectURL(newPreviews[index]);
+        newFiles.splice(index, 1);
+        newPreviews.splice(index, 1);
+        updateEditState({
+            newImageFiles: newFiles,
+            newImagePreviews: newPreviews
+        });
+    };
+
+    const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.[0] || !editState) return;
+        const file = e.target.files[0];
+        const previewUrl = URL.createObjectURL(file);
+
+        updateEditState({
+            videoFile: file,
+            videoPreview: previewUrl,
+            deleteVideo: false
+        });
+    };
+
+    const handleRemoveVideo = () => {
+        if (!editState) return;
+        updateEditState({
+            deleteVideo: true,
+            videoFile: null,
+            videoPreview: null
+        });
+    };
+
+    const handleRestoreVideo = () => {
+        if (!editState) return;
+        updateEditState({
+            deleteVideo: false,
+            videoFile: null,
+            videoPreview: null
+        });
+    };
 
     const getProductImages = (): string[] => {
+        if (isEditing && editState) {
+            const existing = editState.currentImages.map(img => img.image_url || img.image_data || '').filter(Boolean);
+            return [...existing, ...editState.newImagePreviews];
+        }
+
         if (!product) return [];
         const images: string[] = [];
-        
-        // Add Video first (if exists)
+
         if (product.video_url) images.push(product.video_url);
 
         if (product.product_images?.length) {
@@ -250,13 +509,12 @@ const ProductDetail = () => {
                 if (url) images.push(url);
             });
         }
-        // Fallback to old image_url if no gallery
         if (images.length === 0 && product.image_url) images.push(product.image_url);
-        
+
         return images;
     };
 
-    const isVideo = (url: string) => url.includes('.mp4') || url.includes('.webm') || url.includes('video');
+    const isVideo = (url: string) => url.includes('.mp4') || url.includes('.webm') || url.includes('video') || url.startsWith('blob:');
 
     const handleAddToCart = async () => {
         if (!product) return;
@@ -284,13 +542,9 @@ const ProductDetail = () => {
         try {
             await apiService.addProductReview(product.id, newReview.rating, newReview.comment);
             toast.success("Review posted!");
-            
-            // Reload reviews
             const reviewRes = await apiService.getProductReviews(product.id);
-            // ✅ FIXED: Correctly handle array response here too
             const reviewsData = Array.isArray(reviewRes) ? reviewRes : (reviewRes.data || []);
             setReviews(reviewsData);
-            
             setNewReview({ rating: 0, comment: '' });
             setIsReviewFormOpen(false);
         } catch (error: any) {
@@ -306,31 +560,44 @@ const ProductDetail = () => {
         navigate(route);
     };
 
-    // --- FILTER & PAGINATION LOGIC ---
-    const getFilteredReviews = () => {
-        let sorted = [...reviews];
-        switch (reviewFilter) {
-            case "high": sorted.sort((a, b) => b.rating - a.rating); break;
-            case "low": sorted.sort((a, b) => a.rating - b.rating); break;
-            case "recent":
-            default: sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-        }
-        return sorted;
-    };
-
-    const filteredReviews = getFilteredReviews();
-    const totalPages = Math.ceil(filteredReviews.length / REVIEWS_PER_PAGE);
-    const currentReviews = filteredReviews.slice((reviewPage - 1) * REVIEWS_PER_PAGE, reviewPage * REVIEWS_PER_PAGE);
-
     if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
     if (!product) return null;
 
     const productImages = getProductImages();
-    const inStock = product.stock > 0;
+    const inStock = isEditing ? (editState?.stock ?? 0) > 0 : product.stock > 0;
     const averageRating = product.average_rating ? Number(product.average_rating) : 0;
+    const displaySpecs = normalizeSpecs(product.specifications);
 
     return (
-        <div className="min-h-screen bg-background pt-24 pb-16 font-sans">
+        <div className="min-h-screen bg-background pt-24 pb-16 font-sans relative">
+
+            {/* --- ADMIN EDIT BAR --- */}
+            {isAdmin && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-foreground/90 text-background backdrop-blur-md px-6 py-3 rounded-full shadow-2xl border border-white/20 flex items-center gap-4 transition-all">
+                    {!isEditing ? (
+                        <Button onClick={startEditing} variant="secondary" className="rounded-full gap-2 font-bold shadow-lg">
+                            <PenLine size={16} /> Edit Page
+                        </Button>
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <Button size="icon" variant="ghost" className="text-white hover:bg-white/20 rounded-full" onClick={handleUndo} disabled={historyIndex <= 0}>
+                                <Undo size={18} />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="text-white hover:bg-white/20 rounded-full" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>
+                                <Redo size={18} />
+                            </Button>
+                            <div className="w-px h-6 bg-white/20 mx-2" />
+                            <Button variant="destructive" size="sm" onClick={cancelEditing} className="rounded-full">
+                                <X size={16} className="mr-1" /> Cancel
+                            </Button>
+                            <Button variant="default" size="sm" onClick={saveChanges} disabled={isSaving} className="rounded-full bg-green-500 hover:bg-green-600 text-white border-0">
+                                {isSaving ? <Loader2 className="animate-spin mr-1 w-4 h-4"/> : <Save size={16} className="mr-1" />} Save
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="container mx-auto px-4 sm:px-6 lg:px-8">
 
                 {/* 1. BREADCRUMBS */}
@@ -339,7 +606,9 @@ const ProductDetail = () => {
                     <ChevronRight size={14} />
                     <Link to="/shop" className="hover:text-primary transition-colors">Shop</Link>
                     <ChevronRight size={14} />
-                    <span className="font-medium text-foreground truncate">{product.name}</span>
+                    <span className="font-medium text-foreground truncate">
+                        {isEditing ? <span className="italic text-primary">Editing...</span> : product.name}
+                    </span>
                 </div>
 
                 {/* 2. MAIN PRODUCT GRID */}
@@ -349,28 +618,84 @@ const ProductDetail = () => {
                     <div className="space-y-6 top-24 h-fit">
                         <div className="w-[85%] mx-auto aspect-[4/5] bg-white rounded-2xl shadow-sm border border-border/50 relative z-10 flex items-center justify-center overflow-hidden">
                             {activeImage && isVideo(activeImage) ? (
-                                <video
-                                    src={activeImage}
-                                    controls
-                                    autoPlay
-                                    muted
-                                    loop
-                                    className="w-full h-full object-contain"
-                                />
+                                <video src={activeImage} controls autoPlay muted loop className="w-full h-full object-contain" />
                             ) : (
                                 <ImageMagnifier src={activeImage || productImages[0]} />
                             )}
                         </div>
 
                         {/* Thumbnails */}
-                        {productImages.length > 1 && (
-                            <div className="flex gap-3 justify-center flex-wrap">
-                                {productImages.map((img, idx) => (
+                        <div className="flex gap-3 justify-center flex-wrap">
+                            {isEditing && editState ? (
+                                <>
+                                    {/* --- VIDEO EDITING SECTION --- */}
+                                    <div className="w-full mb-2 p-3 bg-muted/30 rounded-lg border border-dashed flex items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center text-primary">
+                                                <Video size={20} />
+                                            </div>
+                                            <div className="text-sm">
+                                                {editState.videoPreview ? (
+                                                    <span className="font-medium text-green-600">New video selected</span>
+                                                ) : editState.deleteVideo ? (
+                                                    <span className="font-medium text-red-500 line-through">Video deleted</span>
+                                                ) : product.video_url ? (
+                                                    <span className="font-medium">Current Video</span>
+                                                ) : (
+                                                    <span className="text-muted-foreground">No video</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            {editState.deleteVideo && (
+                                                <Button size="sm" variant="outline" onClick={handleRestoreVideo} className="h-8">
+                                                    <RefreshCcw size={14} className="mr-1"/> Restore
+                                                </Button>
+                                            )}
+                                            {!editState.deleteVideo && (product.video_url || editState.videoFile) && (
+                                                <Button size="icon" variant="ghost" onClick={handleRemoveVideo} className="h-8 w-8 text-red-500 hover:bg-red-50">
+                                                    <Trash2 size={16} />
+                                                </Button>
+                                            )}
+                                            <label className="cursor-pointer">
+                                                <div className="h-8 px-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md text-xs font-medium flex items-center">
+                                                    {editState.videoFile ? "Replace" : "Upload"}
+                                                </div>
+                                                <input type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Existing Images */}
+                                    {editState.currentImages.map((img) => (
+                                        <div key={img.id} className="relative group w-16 h-16 rounded-lg border overflow-hidden">
+                                            <img src={img.image_url || img.image_data} className="w-full h-full object-contain" />
+                                            <button onClick={() => handleDeleteExistingImage(img.id)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                                <Trash2 size={20} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {/* New Images */}
+                                    {editState.newImagePreviews.map((url, idx) => (
+                                        <div key={`new-${idx}`} className="relative group w-16 h-16 rounded-lg border overflow-hidden border-green-500">
+                                            <img src={url} className="w-full h-full object-contain" />
+                                            <button onClick={() => handleDeleteNewImage(idx)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity">
+                                                <Trash2 size={20} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <label className="w-16 h-16 rounded-lg border-2 border-dashed border-primary/50 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-colors">
+                                        <ImagePlus size={20} className="text-primary" />
+                                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
+                                    </label>
+                                </>
+                            ) : (
+                                productImages.map((img, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setActiveImage(img)}
                                         className={`w-16 h-16 rounded-lg border-2 overflow-hidden relative bg-white
-                            ${activeImage === img ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'}`}
+                                            ${activeImage === img ? 'border-primary ring-2 ring-primary/20' : 'border-transparent'}`}
                                     >
                                         {isVideo(img) ? (
                                             <div className="w-full h-full flex items-center justify-center bg-black/10">
@@ -380,25 +705,68 @@ const ProductDetail = () => {
                                             <img src={img} className="w-full h-full object-contain" alt="Thumbnail" />
                                         )}
                                     </button>
-                                ))}
-                            </div>
-                        )}
+                                ))
+                            )}
+                        </div>
                     </div>
 
                     {/* RIGHT: INFO */}
                     <div className="flex flex-col pt-4">
+                        {/* Category & Subcategory */}
                         <div className="mb-4 flex flex-wrap items-center gap-2">
-                            <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                                {(product.category || 'Uncategorized').replace(/_/g, ' ')}
-                            </span>
-                            {product.sub_category && (
-                                <span className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
-                                    {product.sub_category}
-                                </span>
+                            {isEditing && editState ? (
+                                <>
+                                    <Select value={editState.category} onValueChange={(val) => updateEditState({ category: val })}>
+                                        <SelectTrigger className="w-[140px] h-8 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="3d_printer">3D Printer</SelectItem>
+                                            <SelectItem value="filament">Filament</SelectItem>
+                                            <SelectItem value="resin">Resin</SelectItem>
+                                            <SelectItem value="accessory">Accessory</SelectItem>
+                                            <SelectItem value="spare_part">Spare Part</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <Input
+                                        value={editState.sub_category}
+                                        onChange={(e) => updateEditState({ sub_category: e.target.value })}
+                                        className="w-[140px] h-8 text-xs font-semibold uppercase"
+                                        placeholder="Sub Category"
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
+                                        {(product.category || 'Uncategorized').replace(/_/g, ' ')}
+                                    </span>
+                                    {product.sub_category && (
+                                        <span className="bg-secondary text-secondary-foreground px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
+                                            {product.sub_category}
+                                        </span>
+                                    )}
+                                </>
                             )}
                         </div>
 
-                        <h1 className="text-4xl font-extrabold text-foreground mb-4 leading-tight">{product.name}</h1>
+                        {/* Title */}
+                        {isEditing && editState ? (
+                            <Input
+                                value={editState.name}
+                                onChange={(e) => updateEditState({ name: e.target.value })}
+                                className="text-4xl font-extrabold mb-4 h-auto py-2 border-dashed border-2 border-primary/30 bg-primary/5"
+                            />
+                        ) : (
+                            <h1 className="text-4xl font-extrabold text-foreground mb-4 leading-tight">{product.name}</h1>
+                        )}
+
+                        {/* Short Description */}
+                        {isEditing && editState && (
+                            <Textarea
+                                value={editState.short_description}
+                                onChange={(e) => updateEditState({ short_description: e.target.value })}
+                                className="mb-4 text-muted-foreground border-dashed border-primary/30"
+                                placeholder="Short description..."
+                            />
+                        )}
 
                         {/* Rating Row */}
                         <div className="flex items-center gap-4 mb-8 pb-8 border-b">
@@ -407,46 +775,109 @@ const ProductDetail = () => {
                                 <span className="text-base font-bold text-foreground">{averageRating.toFixed(1)}</span>
                             </div>
                             <span className="text-sm text-muted-foreground">{reviews.length} Reviews</span>
-                            {product.likes_count ? (
-                                <>
-                                    <div className="h-4 w-px bg-border"></div>
-                                    <span className="text-sm text-muted-foreground flex items-center gap-1">
-                                        <Heart className="w-4 h-4 fill-red-500 text-red-500"/> {product.likes_count} Likes
-                                    </span>
-                                </>
-                            ) : null}
                         </div>
 
                         {/* Price & Stock */}
                         <div className="mb-8">
-                            <p className="text-5xl font-bold text-foreground">{formatINR(product.price)}</p>
-                            <p className={`mt-3 text-sm font-medium flex items-center gap-2 ${inStock ? 'text-green-600' : 'text-red-600'}`}>
-                                {inStock ? <Check className="w-4 h-4"/> : null}
-                                {inStock ? `${product.stock} In Stock & Ready to Ship` : 'Out of Stock'}
-                            </p>
+                            {isEditing && editState ? (
+                                <div className="flex gap-4 items-center">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-2xl font-bold">₹</span>
+                                        <Input
+                                            type="number"
+                                            value={editState.price}
+                                            onChange={(e) => updateEditState({ price: Number(e.target.value) })}
+                                            className="text-3xl font-bold w-40 border-dashed border-primary/30"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm">Stock:</span>
+                                        <Input
+                                            type="number"
+                                            value={editState.stock}
+                                            onChange={(e) => updateEditState({ stock: Number(e.target.value) })}
+                                            className="w-24 border-dashed border-primary/30"
+                                        />
+                                    </div>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-5xl font-bold text-foreground">{formatINR(product.price)}</p>
+                                    <p className={`mt-3 text-sm font-medium flex items-center gap-2 ${inStock ? 'text-green-600' : 'text-red-600'}`}>
+                                        {inStock ? <Check className="w-4 h-4"/> : null}
+                                        {inStock ? `${product.stock} In Stock & Ready to Ship` : 'Out of Stock'}
+                                    </p>
+                                </>
+                            )}
                         </div>
 
-                        {/* SPECIFICATIONS */}
-                        {product.specifications && Object.keys(product.specifications).length > 0 && (
-                            <div className="mb-8">
-                                <h3 className="font-semibold mb-3">Key Specs</h3>
-                                <div className="rounded-lg overflow-hidden">
+                        {/* SPECIFICATIONS (DRAG & DROP ENABLED) */}
+                        <div className="mb-8">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-semibold">Key Specs</h3>
+                                {isEditing && (
+                                    <Button size="sm" variant="outline" onClick={handleAddSpec} className="h-7 text-xs">
+                                        <Plus size={12} className="mr-1"/> Add Spec
+                                    </Button>
+                                )}
+                            </div>
+
+                            <div className="rounded-lg overflow-hidden border border-border/50">
+                                {isEditing && editState ? (
+                                    <Reorder.Group
+                                        axis="y"
+                                        values={editState.specificationsArray}
+                                        onReorder={(newOrder) => updateEditState({ specificationsArray: newOrder })}
+                                        className="bg-background"
+                                    >
+                                        {editState.specificationsArray.map((item) => (
+                                            <Reorder.Item
+                                                key={item.id}
+                                                value={item}
+                                                className="flex border-b last:border-0 border-border/50 bg-background"
+                                            >
+                                                <div className="p-2 flex items-center justify-center cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground">
+                                                    <GripVertical size={16} />
+                                                </div>
+                                                <div className="p-2 w-1/3 border-r border-dashed border-border/50">
+                                                    <Input
+                                                        value={item.key}
+                                                        onChange={(e) => handleSpecChange(item.id, 'key', e.target.value)}
+                                                        className="h-8 font-medium text-muted-foreground border-none bg-transparent focus-visible:ring-0 px-0"
+                                                        placeholder="Key"
+                                                    />
+                                                </div>
+                                                <div className="p-2 flex-1 flex items-center gap-2">
+                                                    <Input
+                                                        value={item.value}
+                                                        onChange={(e) => handleSpecChange(item.id, 'value', e.target.value)}
+                                                        className="h-8 font-medium text-foreground border-none bg-transparent focus-visible:ring-0 px-0"
+                                                        placeholder="Value"
+                                                    />
+                                                    <button onClick={() => handleRemoveSpec(item.id)} className="text-red-500 hover:bg-red-50 p-1 rounded shrink-0">
+                                                        <X size={14}/>
+                                                    </button>
+                                                </div>
+                                            </Reorder.Item>
+                                        ))}
+                                    </Reorder.Group>
+                                ) : (
                                     <table className="w-full text-sm text-left">
                                         <tbody>
-                                        {Object.entries(product.specifications).map(([key, value], index) => (
-                                            <tr key={key} className="border-b last:border-0 border-border/50">
+                                        {displaySpecs.map(({key, value}, idx) => (
+                                            <tr key={idx} className="border-b last:border-0 border-border/50">
                                                 <td className="p-3 font-medium text-muted-foreground w-1/3">{key}</td>
                                                 <td className="p-3 font-medium text-foreground">{value}</td>
                                             </tr>
                                         ))}
                                         </tbody>
                                     </table>
-                                </div>
+                                )}
                             </div>
-                        )}
+                        </div>
 
                         {/* Cart Actions */}
-                        <div className="flex flex-col sm:flex-row gap-4 mb-8 mt-auto">
+                        <div className={`flex flex-col sm:flex-row gap-4 mb-8 mt-auto ${isEditing ? 'opacity-50 pointer-events-none' : ''}`}>
                             <div className="flex items-center border rounded-lg h-12 w-32 bg-background shadow-sm">
                                 <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="px-3 h-full hover:bg-accent rounded-l-lg"><Minus size={16}/></button>
                                 <span className="flex-1 text-center font-bold">{quantity}</span>
@@ -469,17 +900,14 @@ const ProductDetail = () => {
                     </div>
                 </div>
 
-                {/* 3. SPLIT SECTION: REVIEWS (Left) & DESCRIPTION (Right) */}
+                {/* 3. SPLIT SECTION: REVIEWS & DESCRIPTION */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 mb-24 items-start">
-
                     {/* LEFT COLUMN: REVIEWS */}
                     <div>
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-2xl font-bold font-display">Customer Reviews</h2>
                             <Select value={reviewFilter} onValueChange={setReviewFilter}>
-                                <SelectTrigger className="w-[140px] h-9">
-                                    <SelectValue placeholder="Sort" />
-                                </SelectTrigger>
+                                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Sort" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="recent">Newest</SelectItem>
                                     <SelectItem value="high">Highest Rated</SelectItem>
@@ -487,7 +915,6 @@ const ProductDetail = () => {
                                 </SelectContent>
                             </Select>
                         </div>
-
                         <div className="mb-8">
                             {!isReviewFormOpen ? (
                                 <button onClick={() => setIsReviewFormOpen(true)} className="flex items-center gap-2 text-primary font-medium hover:underline group">
@@ -509,13 +936,12 @@ const ProductDetail = () => {
                         </div>
 
                         <div className="space-y-6">
-                            {currentReviews.length === 0 ? (
+                            {reviews.length === 0 ? (
                                 <div className="text-center py-10 bg-muted/20 rounded-xl border border-dashed"><p className="text-muted-foreground">No reviews yet. Be the first!</p></div>
                             ) : (
-                                currentReviews.map(r => (
+                                reviews.slice((reviewPage - 1) * REVIEWS_PER_PAGE, reviewPage * REVIEWS_PER_PAGE).map(r => (
                                     <div key={r.id} className="border-b pb-6 last:border-0 last:pb-0">
                                         <div className="flex justify-between items-start mb-2">
-                                            {/* ✅ Shows User Name correctly */}
                                             <div><span className="font-bold text-sm block">{r.user}</span><span className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString()}</span></div>
                                             <StarRating rating={r.rating} size={14} />
                                         </div>
@@ -524,29 +950,29 @@ const ProductDetail = () => {
                                 ))
                             )}
                         </div>
-
-                        {totalPages > 1 && (
-                            <div className="flex justify-center gap-2 mt-8">
-                                <Button variant="outline" size="sm" onClick={() => setReviewPage(p => Math.max(1, p - 1))} disabled={reviewPage === 1}>Previous</Button>
-                                <span className="text-sm flex items-center px-2">Page {reviewPage} of {totalPages}</span>
-                                <Button variant="outline" size="sm" onClick={() => setReviewPage(p => Math.min(totalPages, p + 1))} disabled={reviewPage === totalPages}>Next</Button>
-                            </div>
-                        )}
                     </div>
 
                     {/* RIGHT COLUMN: DESCRIPTION */}
                     <div className="h-fit">
                         <h2 className="text-2xl font-bold font-display mb-6">Product Description</h2>
-                        <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed">
-                            <ul className="space-y-3 list-none pl-0 ">
-                                {product.description.split('\n').filter(line => line.trim() !== '').map((line, i) => (
-                                    <li key={i} className="flex gap-3 items-start">
-                                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0 block" />
-                                        <span>{line}</span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
+                        {isEditing && editState ? (
+                            <Textarea
+                                value={editState.description}
+                                onChange={(e) => updateEditState({ description: e.target.value })}
+                                className="min-h-[400px] font-sans text-muted-foreground leading-relaxed border-dashed border-primary/30"
+                            />
+                        ) : (
+                            <div className="prose prose-sm max-w-none text-muted-foreground leading-relaxed">
+                                <ul className="space-y-3 list-none pl-0 ">
+                                    {product.description.split('\n').filter(line => line.trim() !== '').map((line, i) => (
+                                        <li key={i} className="flex gap-3 items-start">
+                                            <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-primary shrink-0 block" />
+                                            <span>{line}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -559,51 +985,22 @@ const ProductDetail = () => {
                                 Explore Category <ArrowRight className="ml-2 w-4 h-4" />
                             </Button>
                         </div>
-
                         <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0">
                             {relatedProducts.map((related) => {
                                 const rating = related.average_rating ? Number(related.average_rating) : 0;
                                 return (
-                                    <motion.div
-                                        key={related.id}
-                                        initial={{ opacity: 0, y: 20 }}
-                                        whileInView={{ opacity: 1, y: 0 }}
-                                        viewport={{ once: true }}
-                                        className="min-w-[280px] w-[280px] snap-start"
-                                    >
-                                        <Card
-                                            onClick={() => navigate(`/product/${related.id}`)}
-                                            className="cursor-pointer hover:shadow-xl transition-all h-full flex flex-col group border-border/60 overflow-hidden rounded-xl"
-                                        >
-                                            {/* 🔥 Square Image Container (Letterboxed) */}
+                                    <motion.div key={related.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="min-w-[280px] w-[280px] snap-start">
+                                        <Card onClick={() => navigate(`/product/${related.id}`)} className="cursor-pointer hover:shadow-xl transition-all h-full flex flex-col group border-border/60 overflow-hidden rounded-xl">
                                             <div className="aspect-square bg-black flex items-center justify-center relative overflow-hidden">
-                                                <img
-                                                    src={related.image_url || '/placeholder.svg'}
-                                                    alt={related.name}
-                                                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-                                                />
+                                                <img src={related.image_url || '/placeholder.svg'} alt={related.name} className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105" />
                                             </div>
-
                                             <CardContent className="p-4 flex-1 flex flex-col">
                                                 <div className="flex justify-between items-start mb-2 gap-2">
                                                     <h3 className="font-bold text-sm line-clamp-1 flex-1 leading-snug" title={related.name}>{related.name}</h3>
-                                                    {rating > 0 && (
-                                                        <div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded text-[10px] font-bold text-yellow-700 shrink-0">
-                                                            <Star size={10} className="fill-current" /> {rating.toFixed(1)}
-                                                        </div>
-                                                    )}
+                                                    {rating > 0 && (<div className="flex items-center gap-1 bg-yellow-50 px-1.5 py-0.5 rounded text-[10px] font-bold text-yellow-700 shrink-0"><Star size={10} className="fill-current" /> {rating.toFixed(1)}</div>)}
                                                 </div>
-
-                                                <p className="text-xs text-muted-foreground mb-4 line-clamp-2 min-h-[2.5em]">
-                                                    {related.short_description || related.description}
-                                                </p>
-
-                                                <div className="mt-auto flex items-center justify-between">
-                                                    <span className="font-bold text-lg text-primary">{formatINR(related.price)}</span>
-                                                    <Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm">
-                                                        <ShoppingCart size={14} />
-                                                    </Button>
-                                                </div>
+                                                <p className="text-xs text-muted-foreground mb-4 line-clamp-2 min-h-[2.5em]">{related.short_description || related.description}</p>
+                                                <div className="mt-auto flex items-center justify-between"><span className="font-bold text-lg text-primary">{formatINR(related.price)}</span><Button size="icon" variant="secondary" className="h-8 w-8 rounded-full shadow-sm"><ShoppingCart size={14} /></Button></div>
                                             </CardContent>
                                         </Card>
                                     </motion.div>

@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star } from 'lucide-react';
+import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star, Plus } from 'lucide-react'; // ✅ Added Plus
 import { apiService } from '@/services/api.service';
 import { useCart } from "@/hooks/use-cart";
 import ProductImageCarousel from '@/components/ProductImageCarousel';
@@ -19,7 +19,6 @@ interface ProductImage {
     display_order: number;
 }
 
-// ✅ 1. FIXED INTERFACE: Added is_archived
 interface Product {
     id: string;
     name: string;
@@ -35,7 +34,7 @@ interface Product {
     created_at?: string;
     product_images?: ProductImage[];
     images?: ProductImage[];
-    is_archived?: boolean; // <--- Added this line
+    is_archived?: boolean;
 }
 
 // Configuration for Subcategories mapping
@@ -57,7 +56,7 @@ const Shop = () => {
 
     // Filters
     const [searchTerm, setSearchTerm] = useState('');
-    const [debouncedSearch, setDebouncedSearch] = useState(''); // ✅ Added for performance
+    const [debouncedSearch, setDebouncedSearch] = useState('');
     const [activeCategory, setActiveCategory] = useState('all');
     const [activeSubCategory, setActiveSubCategory] = useState('all');
     const [sortOption, setSortOption] = useState('newest');
@@ -65,7 +64,11 @@ const Shop = () => {
     const [isLiked, setIsLiked] = useState<Record<string, boolean>>({});
     const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-    // ✅ Debounce Search Effect
+    // ✅ ADMIN STATE
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+
+    // Debounce Search Effect
     useEffect(() => {
         const timer = setTimeout(() => setDebouncedSearch(searchTerm), 300);
         return () => clearTimeout(timer);
@@ -79,7 +82,7 @@ const Shop = () => {
                 const res = await apiService.getProducts();
                 const products = Array.isArray(res) ? res : (res.data || []);
 
-                // ✅ 2. FIXED LOGIC: Filter out archived products
+                // Filter out archived products
                 const activeProducts = products.filter((p: Product) => !p.is_archived);
 
                 setAllProducts(activeProducts);
@@ -87,9 +90,15 @@ const Shop = () => {
 
                 if (apiService.isAuthenticated()) {
                     try {
-                        await apiService.getCurrentUser();
+                        const user = await apiService.getCurrentUser();
                         setIsAuthenticated(true);
-                        // ✅ 3. FIXED: Load likes from local storage for persistence
+
+                        // ✅ Check Admin Role
+                        if (user.role === 'admin' || user.user?.role === 'admin') {
+                            setIsAdmin(true);
+                        }
+
+                        // Load likes from local storage for persistence
                         const savedLikes = JSON.parse(localStorage.getItem('user_likes') || '{}');
                         setIsLiked(savedLikes);
                     } catch {
@@ -109,7 +118,7 @@ const Shop = () => {
         loadData();
     }, []);
 
-    // ✅ 4. OPTIMIZED FILTER LOGIC (Uses debouncedSearch)
+    // OPTIMIZED FILTER LOGIC
     useEffect(() => {
         let result = [...allProducts];
 
@@ -193,14 +202,12 @@ const Shop = () => {
         const newState = { ...isLiked, [id]: !currentLiked };
 
         setIsLiked(newState);
-        // ✅ Save to local storage
         localStorage.setItem('user_likes', JSON.stringify(newState));
 
         try {
             if (currentLiked) await apiService.unlikeProduct(id);
             else await apiService.likeProduct(id);
         } catch {
-            // Revert on failure
             const revertedState = { ...isLiked, [id]: currentLiked };
             setIsLiked(revertedState);
             localStorage.setItem('user_likes', JSON.stringify(revertedState));
@@ -208,10 +215,60 @@ const Shop = () => {
         }
     };
 
+    // ✅ ADD NEW PRODUCT HANDLER
+    const handleCreateProduct = async () => {
+        if (!isAdmin) return;
+        setIsCreating(true);
+        try {
+            const formData = new FormData();
+            formData.append('name', "New Draft Product");
+            formData.append('description', "Description goes here...");
+            formData.append('short_description', "Short summary");
+            formData.append('price', "0");
+            formData.append('stock', "0");
+            formData.append('category', 'uncategorized');
+            formData.append('specifications', JSON.stringify({}));
+
+            const res = await apiService.createProduct(formData);
+            const newId = res.id || res.data?.id;
+
+            if (newId) {
+                toast.success("Draft created! Redirecting to editor...");
+                navigate(`/product/${newId}?edit=true`);
+            } else {
+                throw new Error("No ID returned");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to create new product");
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
     if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>;
 
     return (
-        <div className="min-h-screen pt-20 pb-10 font-sans">
+        <div className="min-h-screen pt-20 pb-10 font-sans relative">
+
+            {/* ✅ ADMIN ADD BUTTON */}
+            {isAdmin && (
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="fixed bottom-8 right-8 z-50"
+                >
+                    <Button
+                        size="lg"
+                        onClick={handleCreateProduct}
+                        disabled={isCreating}
+                        className="h-16 w-16 rounded-full shadow-2xl bg-primary hover:bg-primary/90 text-white flex items-center justify-center border-4 border-white/20 backdrop-blur-sm"
+                    >
+                        {isCreating ? <Loader2 className="animate-spin w-8 h-8" /> : <Plus className="w-8 h-8" />}
+                    </Button>
+                </motion.div>
+            )}
+
             <div className="container mx-auto px-4">
 
                 <section className="py-12 mb-8 rounded-2xl bg-secondary/10 text-center border border-border/50">
@@ -223,7 +280,7 @@ const Shop = () => {
                     </motion.div>
                 </section>
 
-                <section className="sticky top-20 z-30 bg-background/95 backdrop-blur-md border rounded-xl p-3 mb-8 shadow-sm">
+                <section className="top-20 z-30 bg-background/95 backdrop-blur-md border rounded-xl p-3 mb-8 shadow-sm">
                     <div className="flex flex-col lg:flex-row items-center gap-3">
                         <div className="relative flex-1 w-full">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

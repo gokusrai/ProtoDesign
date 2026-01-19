@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from 'sonner';
-import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star } from 'lucide-react';
+import { Loader2, ShoppingCart, Search, Heart, Filter, X, Star, Plus } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import { useCart } from "@/hooks/use-cart";
 import ProductImageCarousel from '@/components/ProductImageCarousel';
@@ -57,24 +57,26 @@ const CategoryPage = ({ category, title, subtitle, subCategories = [] }: Categor
 
     const [isLiked, setIsLiked] = useState<Record<string, boolean>>({});
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [isAdmin, setIsAdmin] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
             setLoading(true);
             try {
                 const res = await apiService.getProducts(category);
-
-                // ✅ FIX: Handle response whether it is [products] or { data: [products] }
                 const products = Array.isArray(res) ? res : (res.data || []);
 
                 setAllProducts(products);
                 setDisplayedProducts(products);
 
-                // ✅ FIX: Only check auth if token exists
                 if (apiService.isAuthenticated()) {
                     try {
-                        await apiService.getCurrentUser();
+                        const user = await apiService.getCurrentUser();
                         setIsAuthenticated(true);
+                        if (user.role === 'admin' || user.user?.role === 'admin') {
+                            setIsAdmin(true);
+                        }
                     } catch {
                         setIsAuthenticated(false);
                     }
@@ -176,10 +178,61 @@ const CategoryPage = ({ category, title, subtitle, subCategories = [] }: Categor
         }
     };
 
+    // ✅ UPDATED HANDLER
+    const handleCreateProduct = async () => {
+        if (!isAdmin) return;
+        setIsCreating(true);
+        try {
+            // ✅ Send as FormData to satisfy backend Multer expectations
+            const formData = new FormData();
+            formData.append('name', "New Draft Product");
+            formData.append('description', "Description goes here...");
+            formData.append('short_description', "Short summary");
+            formData.append('price', "0");
+            formData.append('stock', "0");
+            formData.append('category', category === 'all' ? 'uncategorized' : category);
+            formData.append('specifications', JSON.stringify({}));
+
+            const res = await apiService.createProduct(formData);
+            const newId = res.id || res.data?.id;
+
+            if (newId) {
+                toast.success("Draft created! Redirecting to editor...");
+                navigate(`/product/${newId}?edit=true`);
+            } else {
+                throw new Error("No ID returned");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to create new product");
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
     if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-primary" /></div>;
 
     return (
-        <div className="min-h-screen pt-20 pb-10 font-sans">
+        <div className="min-h-screen pt-20 pb-10 font-sans relative">
+
+            {/* ✅ ADMIN ADD BUTTON */}
+            {isAdmin && (
+                <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="fixed bottom-8 right-8 z-50"
+                >
+                    <Button
+                        size="lg"
+                        onClick={handleCreateProduct}
+                        disabled={isCreating}
+                        className="h-16 w-16 rounded-full shadow-2xl bg-primary hover:bg-primary/90 text-white flex items-center justify-center border-4 border-white/20 backdrop-blur-sm"
+                    >
+                        {isCreating ? <Loader2 className="animate-spin w-8 h-8" /> : <Plus className="w-8 h-8" />}
+                    </Button>
+                </motion.div>
+            )}
+
             <div className="container mx-auto px-4">
 
                 <section className="py-12 mb-8 rounded-2xl bg-secondary/10 text-center border border-border/50">
@@ -189,7 +242,7 @@ const CategoryPage = ({ category, title, subtitle, subCategories = [] }: Categor
                     </motion.div>
                 </section>
 
-                <section className="sticky top-20 z-30 bg-background/95 backdrop-blur-md border rounded-xl p-3 mb-8 shadow-sm">
+                <section className="top-20 z-30 bg-background/95 backdrop-blur-md border rounded-xl p-3 mb-8 shadow-sm">
                     <div className="flex flex-col lg:flex-row items-center gap-3">
                         <div className="relative flex-1 w-full">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
