@@ -278,12 +278,11 @@ const ProductDetail = () => {
         loadData();
     }, [productId, navigate]);
 
-    // ✅ AUTO EDIT EFFECT
+    // ✅ Auto Edit Trigger
     useEffect(() => {
         if (product && isAdmin && searchParams.get('edit') === 'true' && !isEditing) {
             startEditing();
-            // Clear the param so refreshing doesn't stick in edit mode if user cancels
-            setSearchParams({}, { replace: true });
+            // Don't clear params immediately so we know if it is 'new'
         }
     }, [product, isAdmin, searchParams]);
 
@@ -355,16 +354,32 @@ const ProductDetail = () => {
         }
     };
 
-    const cancelEditing = () => {
+    const cancelEditing = async () => {
         if (editState) {
             editState.newImagePreviews.forEach(url => URL.revokeObjectURL(url));
             if (editState.videoPreview) URL.revokeObjectURL(editState.videoPreview);
         }
+
+        // If it was a NEW draft, delete it permanently
+        if (searchParams.get('new') === 'true' && product) {
+            try {
+                await apiService.deleteProduct(product.id, true); // True = permanent
+                toast.info("Draft discarded");
+                navigate(-1); // Go back to previous page
+                return;
+            } catch (e) {
+                console.error("Failed to delete draft", e);
+            }
+        }
+
         setIsEditing(false);
         setEditState(null);
         setHistory([]);
+        // Clear params on simple cancel
+        setSearchParams({}, { replace: true });
     };
 
+    // ✅ UPDATED SAVE LOGIC
     const saveChanges = async () => {
         if (!product || !editState) return;
         setIsSaving(true);
@@ -381,23 +396,19 @@ const ProductDetail = () => {
             formData.append('sub_category', editState.sub_category);
             formData.append('specifications', JSON.stringify(specsToSave));
 
-            if (editState.deletedImageIds.length > 0) {
-                formData.append('imagesToDelete', JSON.stringify(editState.deletedImageIds));
-            }
+            // ✅ Mark as Published (Visible)
+            formData.append('is_archived', 'false');
 
-            editState.newImageFiles.forEach(file => {
-                formData.append('images', file);
-            });
-
-            if (editState.videoFile) {
-                formData.append('video', editState.videoFile);
-            }
-            if (editState.deleteVideo && !editState.videoFile) {
-                formData.append('delete_video', 'true');
-            }
+            if (editState.deletedImageIds.length > 0) formData.append('imagesToDelete', JSON.stringify(editState.deletedImageIds));
+            editState.newImageFiles.forEach(file => formData.append('images', file));
+            if (editState.videoFile) formData.append('video', editState.videoFile);
+            if (editState.deleteVideo && !editState.videoFile) formData.append('delete_video', 'true');
 
             await apiService.updateProduct(product.id, formData);
-            toast.success("Product updated successfully!");
+            toast.success("Product published successfully!");
+
+            // Clear 'new' param so refreshing doesn't cause weird state
+            setSearchParams({});
             window.location.reload();
         } catch (error: any) {
             toast.error(error.message || "Failed to update product");

@@ -192,13 +192,14 @@ const CategoryPage = ({ category, title, subtitle, subCategories = [] }: Categor
             formData.append('stock', "0");
             formData.append('category', category === 'all' ? 'uncategorized' : category);
             formData.append('specifications', JSON.stringify({}));
+            formData.append('is_archived', 'true');
 
             const res = await apiService.createProduct(formData);
             const newId = res.id || res.data?.id;
 
             if (newId) {
                 toast.success("Draft created! Redirecting to editor...");
-                navigate(`/product/${newId}?edit=true`);
+                navigate(`/product/${newId}?edit=true&new=true`);
             } else {
                 throw new Error("No ID returned");
             }

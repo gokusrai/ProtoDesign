@@ -1,6 +1,5 @@
 // src/services/api.service.ts
 
-// If VITE_API_URL is set (Cloud), use it. Otherwise use /api (Local)
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 interface RequestOptions extends RequestInit {
@@ -49,11 +48,10 @@ class ApiService {
         const contentType = res.headers.get("content-type") || "";
 
         if (!res.ok) {
-            // Handle 401 specifically (Token Expired)
             if (res.status === 401 && !options.skipAuth) {
                 this.clearToken();
                 if (window.location.pathname !== '/auth') {
-                    window.location.href = '/auth'; // Redirect to login
+                    window.location.href = '/auth';
                 }
             }
 
@@ -80,7 +78,6 @@ class ApiService {
         return res.text().catch(() => "");
     }
 
-    // ========== Token Management ==========
     setToken(token: string) {
         this.token = token;
         localStorage.setItem("auth_token", token);
@@ -98,8 +95,6 @@ class ApiService {
     isAuthenticated() {
         return !!this.token;
     }
-
-    // ========== Auth Routes ==========
 
     async signup(email: string, password: string, fullName: string) {
         const data = await this.request("/auth/signup", {
@@ -178,8 +173,6 @@ class ApiService {
         });
     }
 
-    // ========== User Profile Routes ==========
-
     async getUserProfile() {
         return this.request("/user/profile");
     }
@@ -202,7 +195,6 @@ class ApiService {
         });
     }
 
-    // ✅ ADDED
     async updateAddress(id: string, address: any) {
         return this.request(`/user/addresses/${id}`, {
             method: "PUT",
@@ -217,8 +209,6 @@ class ApiService {
     async getSavedModels() {
         return this.request("/user/models");
     }
-
-    // ========== Products Routes ==========
 
     async bulkUploadProducts(file: File) {
         const formData = new FormData();
@@ -260,11 +250,12 @@ class ApiService {
         });
     }
 
-    async deleteProduct(id: string) {
-        return this.request(`/products/${id}`, { method: "DELETE" });
+    // ✅ UPDATED: Supports permanent delete
+    async deleteProduct(id: string, permanent: boolean = false) {
+        const query = permanent ? '?permanent=true' : '';
+        return this.request(`/products/${id}${query}`, { method: "DELETE" });
     }
 
-    // ========== Cart Routes ==========
     async getCart() {
         return this.request("/cart");
     }
@@ -295,7 +286,6 @@ class ApiService {
         });
     }
 
-    // ========== Orders Routes ==========
     async getOrders() {
         return this.request("/orders", { method: "GET" });
     }
@@ -339,7 +329,6 @@ class ApiService {
         return this.request("/orders/admin/all", { method: "GET" });
     }
 
-    // ===== REVIEWS & LIKES =====
     async getProductReviews(productId: string) {
         return this.request(`/products/${productId}/reviews`, { method: "GET" });
     }
@@ -363,13 +352,11 @@ class ApiService {
         return this.request(`/products/${productId}/like`, { method: 'DELETE' });
     }
 
-    // ===== QUOTES =====
     async sendQuoteRequest(formData: FormData) {
-        // Public/Semi-public route
         return this.request("/quotes/request", {
             method: "POST",
             body: formData,
-            });
+        });
     }
 
     async getAllQuotes() {
@@ -383,7 +370,6 @@ class ApiService {
         });
     }
 
-    // ✅ ADDED
     async getMyQuotes() {
         return this.request("/quotes/my");
     }

@@ -11,7 +11,7 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ Robust Admin Middleware
+// ✅ Robust Admin Middleware (Unchanged)
 const isAdmin = async (req, res, next) => {
     try {
         let role = null;
@@ -38,18 +38,16 @@ const isAdmin = async (req, res, next) => {
     }
 };
 
-// CSV Parser
+// ... (CSV Parser and Helper functions omitted for brevity, they remain the same) ...
 const parseCSV = (buffer) => {
     const text = buffer.toString();
     const rows = [];
     let currentRow = [];
     let currentCell = '';
     let insideQuotes = false;
-
     for (let i = 0; i < text.length; i++) {
         const char = text[i];
         const nextChar = text[i + 1];
-
         if (char === '"') {
             if (insideQuotes && nextChar === '"') {
                 currentCell += '"'; i++;
@@ -65,7 +63,6 @@ const parseCSV = (buffer) => {
     }
     if (currentCell || currentRow.length > 0) { currentRow.push(currentCell.trim()); rows.push(currentRow); }
     if (rows.length < 2) return [];
-
     const headers = rows[0].map(h => h.replace(/^"|"$/g, '').replace(/^\uFEFF/, '').toLowerCase().trim());
     return rows.slice(1).map(row => {
         const obj = {};
@@ -91,29 +88,20 @@ const parseSpecs = (str) => {
     return specs;
 };
 
-// ✅ UPDATED HELPER: Robust Google Drive Link Converter
 const formatImageUrl = (url) => {
     if (!url) return null;
-
-    // Check if it is a Google Drive Link
     if (url.includes('drive.google.com')) {
-        // Pattern 1: /file/d/ID/view (Standard "Share" link)
         const matchView = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        if (matchView && matchView[1]) {
-            return `https://drive.google.com/uc?export=download&id=${matchView[1]}`;
-        }
-
-        // Pattern 2: open?id=ID (The "Copy Link" format you are using)
+        if (matchView && matchView[1]) return `https://drive.google.com/uc?export=download&id=${matchView[1]}`;
         const matchOpen = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-        if (matchOpen && matchOpen[1]) {
-            return `https://drive.google.com/uc?export=download&id=${matchOpen[1]}`;
-        }
+        if (matchOpen && matchOpen[1]) return `https://drive.google.com/uc?export=download&id=${matchOpen[1]}`;
     }
     return url;
 };
 
-// BULK UPLOAD ROUTE
+// BULK UPLOAD ROUTE (Unchanged)
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
+    // ... (Existing implementation)
     console.log("📂 Received Bulk Upload");
     try {
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
@@ -308,21 +296,21 @@ router.post('/:id/like', authMiddleware, async (req, res) => {
 // ADMIN ROUTES
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
-        const { name, description, short_description, price, category, stock, specifications } = req.body;
+        // ✅ Added is_archived to destructured variables
+        const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
         let videoUrl = null;
 
-        // ✅ FIXED: Check if req.files exists
         if (req.files && req.files['video']) {
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
+        // ✅ Updated INSERT to include is_archived
         const product = await db.one(
-            `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-            [name, description, short_description, price, category, stock, specifications, videoUrl]
+            `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url, is_archived)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [name, description, short_description, price, category, stock, specifications, videoUrl, is_archived === 'true']
         );
 
-        // ✅ FIXED: Check if req.files exists
         if (req.files && req.files['images']) {
             for (let i = 0; i < req.files['images'].length; i++) {
                 const url = await storageService.uploadFile(req.files['images'][i], 'products');
@@ -339,16 +327,17 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
 
 router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
-        const { name, description, short_description, price, category, stock, specifications, imagesToDelete } = req.body;
+        // ✅ Added is_archived to destructured variables
+        const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
 
+        // ✅ Update Query now includes is_archived
         await db.none(
             `UPDATE products
-             SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, updated_at=NOW()
-             WHERE id=$8`,
-            [name, description, short_description, price, category, stock, specifications, req.params.id]
+             SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, is_archived=$8, updated_at=NOW()
+             WHERE id=$9`,
+            [name, description, short_description, price, category, stock, specifications, is_archived === 'true', req.params.id]
         );
 
-        // ✅ FIXED: Check if req.files exists
         if (req.files && req.files['video']) {
             const videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
             await db.none('UPDATE products SET video_url = $1 WHERE id = $2', [videoUrl, req.params.id]);
@@ -360,7 +349,6 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             if (idsToDelete.length > 0) await db.none('DELETE FROM product_images WHERE id IN ($1:csv)', [idsToDelete]);
         }
 
-        // ✅ FIXED: Check if req.files exists
         if (req.files && req.files['images']) {
             const maxOrdResult = await db.one('SELECT COALESCE(MAX(display_order), -1) as m FROM product_images WHERE product_id=$1', [req.params.id]);
             let nextOrder = maxOrdResult.m + 1;
@@ -377,8 +365,22 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// ✅ UPDATED: Delete Route with Permanent option
 router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
-    try { await db.none('UPDATE products SET is_archived = true WHERE id = $1', [req.params.id]); res.json({ message: 'Archived' }); } catch (error) { res.status(500).json({ error: error.message }); }
+    try {
+        if (req.query.permanent === 'true') {
+            // Hard Delete
+            await db.none('DELETE FROM product_images WHERE product_id = $1', [req.params.id]);
+            await db.none('DELETE FROM reviews WHERE product_id = $1', [req.params.id]);
+            await db.none('DELETE FROM product_likes WHERE product_id = $1', [req.params.id]);
+            await db.none('DELETE FROM products WHERE id = $1', [req.params.id]);
+            res.json({ message: 'Deleted permanently' });
+        } else {
+            // Soft Delete (Archive)
+            await db.none('UPDATE products SET is_archived = true WHERE id = $1', [req.params.id]);
+            res.json({ message: 'Archived' });
+        }
+    } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 router.patch('/:id/restore', authMiddleware, isAdmin, async (req, res) => {
