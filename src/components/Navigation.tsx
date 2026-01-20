@@ -163,13 +163,18 @@ export const Navigation = () => {
                     {/* Right Icons */}
                     <div className="flex items-center gap-2">
                         <Link to="/shop">
-                            <Button variant="ghost" size="icon" className="hidden sm:flex text-muted-foreground hover:text-primary">
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="hidden sm:flex text-muted-foreground hover:text-primary"
+                                aria-label="Search products" // <--- ADD THIS
+                            >
                                 <Search size={20} />
                             </Button>
                         </Link>
 
                         <Link to="/cart">
-                            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-primary">
+                            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-primary" aria-label="View cart">
                                 <ShoppingCart size={20} />
                                 {itemCount > 0 && (
                                     <span className="absolute top-1 right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
@@ -221,7 +226,14 @@ export const Navigation = () => {
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             ) : (
-                                <Link to="/auth"><Button size="sm" className="rounded-full px-6">Sign In</Button></Link>
+                                <Link to="/auth">
+                                    <Button
+                                        size="sm"
+                                        className="rounded-full px-6 text-foreground font-semibold" // Added text-foreground (or text-black) and font-semibold
+                                    >
+                                        Sign In
+                                    </Button>
+                                </Link>
                             )}
                         </div>
 
@@ -229,6 +241,7 @@ export const Navigation = () => {
                         <button
                             className="md:hidden p-2 text-foreground/80"
                             onClick={() => setIsOpen(!isOpen)}
+                            aria-label="Toggle main menu"
                         >
                             {isOpen ? <X size={24} /> : <Menu size={24} />}
                         </button>

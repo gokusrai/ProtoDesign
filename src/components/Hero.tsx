@@ -46,17 +46,22 @@ export const Hero = () => {
   return (
     <div ref={heroRef} className="relative min-h-screen flex items-center overflow-hidden">
       {/* Background Image with Parallax */}
-      <div
-        ref={imageRef}
-        className="absolute inset-0 w-full h-[120%] -top-[10%]"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent z-10" />
-        <img
-          src={heroImage}
-          alt="Premium 3D Printing"
-          className="w-full h-full object-cover"
-        />
-      </div>
+        <div
+            ref={imageRef}
+            className="absolute inset-0 w-full h-[120%] -top-[10%]"
+        >
+            <div className="absolute inset-0 bg-gradient-to-r from-background/95 via-background/70 to-transparent z-10" />
+            <img
+                src={heroImage}
+                alt="Premium 3D Printing"
+                className="w-full h-full object-cover"
+                // ADD THESE TWO PROPERTIES:
+                loading="eager"
+                fetchPriority="high"
+                width="1920" // Add explicit width/height to prevent layout shifts (CLS)
+                height="1080"
+            />
+        </div>
 
       {/* Content */}
       <div ref={contentRef} className="container mx-auto px-4 relative z-20 pt-20">

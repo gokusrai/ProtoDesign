@@ -25,7 +25,7 @@ export const Footer = () => {
                             </Link>
 
                         </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
+                        <p className="text-sm text-foreground/80 leading-relaxed">
                             Empowering creators with premium 3D printing solutions. From high-end printers to custom prototyping services.
                         </p>
                     </div>
@@ -33,7 +33,7 @@ export const Footer = () => {
                     {/* Column 2: Quick Links */}
                     <div>
                         <h3 className="font-semibold mb-4">Shop</h3>
-                        <ul className="space-y-2 text-sm text-muted-foreground">
+                        <ul className="space-y-2 text-sm text-foreground/80">
                             <li><Link to="/printers" className="hover:text-primary transition-colors">3D Printers</Link></li>
                             <li><Link to="/filaments" className="hover:text-primary transition-colors">Filaments</Link></li>
                             <li><Link to="/resins" className="hover:text-primary transition-colors">Resins</Link></li>
@@ -44,7 +44,7 @@ export const Footer = () => {
                     {/* Column 3: Legal & Support */}
                     <div>
                         <h3 className="font-semibold mb-4">Support</h3>
-                        <ul className="space-y-2 text-sm text-muted-foreground">
+                        <ul className="space-y-2 text-sm text-foreground/80">
                             <li><Link to="/orders" className="hover:text-primary transition-colors">Track Order</Link></li>
                             <li><Link to="/terms-and-conditions" className="hover:text-primary transition-colors">Terms & Conditions</Link></li>
                             <li><Link to="/privacy-policy" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
@@ -57,7 +57,7 @@ export const Footer = () => {
                     {/* Column 4: Contact */}
                     <div>
                         <h3 className="font-semibold mb-4">Contact Us</h3>
-                        <ul className="space-y-3 text-sm text-muted-foreground">
+                        <ul className="space-y-3 text-sm text-foreground/80">
                             <li className="flex items-center gap-2">
                                 <Mail className="w-4 h-4 text-primary" />
                                 <a href="mailto:help@protodesignstudio.com" className="hover:text-primary">help@protodesignstudio.com</a>
@@ -73,16 +73,34 @@ export const Footer = () => {
                         </ul>
                         {/* Social Icons */}
                         <div className="flex gap-4 mt-4">
-                            <a href="https://www.instagram.com/protodesignstudio.3d/" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Instagram className="w-4 h-4" /></a>
-                            <a href="https://www.youtube.com/@ProtoDesignStudio3d" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Youtube className="w-4 h-4" /></a>
-                            <a href="https://www.facebook.com/profile.php?id=61586266060055" className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"><Facebook className="w-4 h-4" /></a>
+                            <a
+                                href="https://www.instagram.com/protodesignstudio.3d/"
+                                className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"
+                                aria-label="Follow us on Instagram" // <--- ADD THIS
+                            >
+                                <Instagram className="w-4 h-4" />
+                            </a>
+                            <a
+                                href="https://www.youtube.com/@ProtoDesignStudio3d"
+                                className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"
+                                aria-label="Subscribe to our YouTube channel" // <--- ADD THIS
+                            >
+                                <Youtube className="w-4 h-4" />
+                            </a>
+                            <a
+                                href="https://www.facebook.com/profile.php?id=61586266060055"
+                                className="p-2 bg-background rounded-full border hover:border-primary/50 transition-colors"
+                                aria-label="Follow us on Facebook" // <--- ADD THIS
+                            >
+                                <Facebook className="w-4 h-4" />
+                            </a>
                         </div>
                     </div>
                 </div>
 
                 <Separator className="my-8" />
 
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-muted-foreground">
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-foreground/80">
                     <p>© 2025 Zon Robotics and AI Pvt. Ltd. All rights reserved.</p>
                     <div className="flex gap-4">
                         <span>Secure Payments</span>
