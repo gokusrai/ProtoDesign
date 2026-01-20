@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import heroImage from "@/assets/hero-3d-printing.jpg";
+import heroImage from "@/assets/hero-3d-printing.webp";
 import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
