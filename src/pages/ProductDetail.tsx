@@ -38,6 +38,7 @@ import { apiService } from "@/services/api.service";
 import { useCart } from "@/hooks/use-cart";
 import { formatINR } from "@/lib/currency";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
+import { useDropzone } from 'react-dropzone';
 
 // --- INTERFACES ---
 interface ProductImage {
@@ -441,15 +442,34 @@ const ProductDetail = () => {
         updateEditState({ specificationsArray: newArray });
     };
 
-    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!e.target.files || !editState) return;
-        const files = Array.from(e.target.files);
+    const handleImageUpload = (files: File[]) => {
+        if (!files || !files.length || !editState) return;
+
         const previews = files.map(f => URL.createObjectURL(f));
 
         updateEditState({
             newImageFiles: [...editState.newImageFiles, ...files],
             newImagePreviews: [...editState.newImagePreviews, ...previews]
         });
+    };
+
+    const DetailImageDropzone = () => {
+        const { getRootProps, getInputProps, isDragActive } = useDropzone({
+            onDrop: handleImageUpload,
+            accept: { 'image/*': [] }
+        });
+
+        return (
+            <div
+                {...getRootProps()}
+                className={`w-16 h-16 rounded-lg border-2 border-dashed flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-colors ${
+                    isDragActive ? 'border-primary bg-primary/10' : 'border-primary/50'
+                }`}
+            >
+                <input {...getInputProps()} />
+                <ImagePlus size={20} className={isDragActive ? "text-primary animate-bounce" : "text-primary"} />
+            </div>
+        );
     };
 
     const handleDeleteExistingImage = (imageId: string) => {
@@ -695,10 +715,7 @@ const ProductDetail = () => {
                                             </button>
                                         </div>
                                     ))}
-                                    <label className="w-16 h-16 rounded-lg border-2 border-dashed border-primary/50 flex flex-col items-center justify-center cursor-pointer hover:bg-primary/5 transition-colors">
-                                        <ImagePlus size={20} className="text-primary" />
-                                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
-                                    </label>
+                                    <DetailImageDropzone />
                                 </>
                             ) : (
                                 productImages.map((img, idx) => (

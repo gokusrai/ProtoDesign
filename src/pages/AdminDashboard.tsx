@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Card,
@@ -46,6 +46,7 @@ import {
 } from 'lucide-react';
 import { formatINR } from '@/lib/currency';
 import { apiService } from '@/services/api.service';
+import {useDropzone} from "react-dropzone";
 
 // --- CONFIGURATION ---
 const MAIN_CATEGORIES = [
@@ -324,15 +325,14 @@ export default function AdminDashboard() {
         });
     };
 
-    const handleNewProductImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
+    const handleNewProductImagesUpload = useCallback((files: File[]) => {
         const total = newProduct.imageFiles.length + files.length;
         if (total > 7) { toast.error('Max 7 images'); return; }
 
         const previews = files.map(file => URL.createObjectURL(file));
         setNewProductImagePreviews(prev => [...prev, ...previews]);
         setNewProduct(prev => ({ ...prev, imageFiles: [...prev.imageFiles, ...files] }));
-    };
+    }, [newProduct.imageFiles]);
 
     const removeNewProductImage = (index: number) => {
         URL.revokeObjectURL(newProductImagePreviews[index]);
@@ -392,8 +392,7 @@ export default function AdminDashboard() {
         setEditingProductImages([]);
     };
 
-    const handleEditProductImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
+    const handleEditProductImagesUpload = useCallback((files: File[]) => {
         if (editingProductImages.length + files.length > 7) { toast.error('Max 7 images'); return; }
 
         const newImages = files.map(file => ({
@@ -401,7 +400,7 @@ export default function AdminDashboard() {
         }));
         setEditingProductImages(prev => [...prev, ...newImages]);
         setEditingProductData(prev => ({ ...prev, imageFiles: [...prev.imageFiles, ...files] }));
-    };
+    }, [editingProductImages]);
 
     const removeEditProductImage = (index: number) => {
         const image = editingProductImages[index];
@@ -445,6 +444,31 @@ export default function AdminDashboard() {
             cancelEditProduct();
             fetchDashboardData();
         } catch (e: any) { toast.error(e.message || 'Update failed'); }
+    };
+
+    const ImageDropzone = ({ onDrop, disabled }: { onDrop: (files: File[]) => void, disabled?: boolean }) => {
+        const { getRootProps, getInputProps, isDragActive } = useDropzone({
+            onDrop,
+            accept: { 'image/*': [] },
+            disabled
+        });
+
+        return (
+            <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-md flex flex-col items-center justify-center cursor-pointer aspect-square hover:bg-muted/50 transition-colors ${
+                    isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'
+                }`}
+            >
+                <input {...getInputProps()} />
+                {isDragActive ? (
+                    <Upload className="h-6 w-6 text-primary animate-bounce" />
+                ) : (
+                    <Plus className="h-6 w-6 text-muted-foreground" />
+                )}
+                {isDragActive && <span className="text-[10px] text-primary font-bold mt-1">Drop Here</span>}
+            </div>
+        );
     };
 
     // ✅ Renamed to handleArchiveProduct
@@ -696,7 +720,8 @@ export default function AdminDashboard() {
                                                     <button type="button" onClick={() => removeNewProductImage(i)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button>
                                                 </div>
                                             ))}
-                                            <label className="border-2 border-dashed rounded-md flex flex-col items-center justify-center cursor-pointer hover:bg-muted/50 aspect-square"><Upload className="h-6 w-6 text-muted-foreground" /><input type="file" multiple accept="image/*" className="hidden" onChange={handleNewProductImagesUpload} /></label>
+                                            {/* ✅ Updated Dropzone */}
+                                            <ImageDropzone onDrop={handleNewProductImagesUpload} />
                                         </div>
                                     </div>
                                     <div className="mt-4">
@@ -729,7 +754,19 @@ export default function AdminDashboard() {
                                             <div><Label>Short Desc</Label><Textarea value={editingProductData.short_description} onChange={e => setEditingProductData({...editingProductData, short_description: e.target.value})} /></div>
                                             {renderSpecInputs(true, editingProductData.specs)}
                                             <div><Label>Full Desc</Label><Textarea className="h-32" value={editingProductData.description} onChange={e => setEditingProductData({ ...editingProductData, description: e.target.value })} /></div>
-                                            <div><Label>Images</Label><div className="mt-2 grid grid-cols-5 gap-2">{editingProductImages.map((img, i) => (<div key={img.id} className="relative group aspect-square"><img src={img.url} className="w-full h-full object-cover rounded border" /><button onClick={() => removeEditProductImage(i)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button></div>))}<label className="border-dashed border-2 rounded flex items-center justify-center cursor-pointer aspect-square"><Plus/><input type="file" multiple hidden onChange={handleEditProductImagesUpload}/></label></div></div>
+                                            <div>
+                                                <Label>Images</Label>
+                                                <div className="mt-2 grid grid-cols-5 gap-2">
+                                                    {editingProductImages.map((img, i) => (
+                                                        <div key={img.id} className="relative group aspect-square">
+                                                            <img src={img.url} className="w-full h-full object-cover rounded border" />
+                                                            <button onClick={() => removeEditProductImage(i)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"><X size={12}/></button>
+                                                        </div>
+                                                    ))}
+                                                    {/* ✅ Updated Dropzone */}
+                                                    <ImageDropzone onDrop={handleEditProductImagesUpload} />
+                                                </div>
+                                            </div>
                                             <div className="mt-4"><Label>Video</Label>{!editingProductData.videoFile && editingVideoPreview && (<div className="mb-2 p-3 border rounded bg-muted/20 flex items-center justify-between"><div className="flex items-center gap-2"><FileText className="w-4 h-4 text-blue-500" /><a href={editingVideoPreview} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline">View Current</a></div></div>)}<div className="mt-2 border-2 border-dashed rounded-md p-4 flex flex-col items-center justify-center hover:bg-muted/50 cursor-pointer relative"><input type="file" accept="video/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => { const file = e.target.files?.[0]; if(file) setEditingProductData({...editingProductData, videoFile: file}); }} />{editingProductData.videoFile ? <div className="flex items-center gap-2 text-green-600"><FileText className="w-5 h-5" /><span className="text-sm font-medium">{editingProductData.videoFile.name}</span><Button type="button" variant="ghost" size="sm" className="z-10 text-red-500" onClick={(e) => { e.stopPropagation(); setEditingProductData({...editingProductData, videoFile: null}); }}><X size={14} /></Button></div> : <div className="text-center text-muted-foreground"><Upload className="h-6 w-6 mx-auto mb-2" /><span className="text-sm">Click to replace</span></div>}</div></div>
                                             <div className="flex gap-2"><Button onClick={saveEditedProduct} size="sm">Save</Button><Button variant="ghost" onClick={cancelEditProduct} size="sm">Cancel</Button></div>
                                         </div>
