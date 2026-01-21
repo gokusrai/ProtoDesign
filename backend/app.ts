@@ -21,7 +21,7 @@ const app = express();
 // ============================================
 // 1. SECURITY MIDDLEWARE (Updated)
 // ============================================
-app.use('/', sitemapRoutes);
+
 // Allow Google Login Popups and Cross-Origin Images
 app.use(helmet({
     crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
@@ -86,6 +86,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'src/uploads')));
 // ============================================
 // 5. API ROUTES
 // ============================================
+app.use('/', sitemapRoutes);
+
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'OK',

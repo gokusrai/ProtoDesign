@@ -1,13 +1,13 @@
 import express from 'express';
-import pool from '../config/database.js'; // Adjust if your DB config export is different
+import db from '../config/database.js'; // Importing the pg-promise instance
 
 const router = express.Router();
 
 router.get('/sitemap.xml', async (req, res) => {
     try {
-        // Fetch all non-archived product IDs
-        const result = await pool.query('SELECT id, updated_at FROM products WHERE is_archived = false');
-        const products = result.rows;
+        // FIX: Use db.any() which is the correct pg-promise method for multiple rows
+        // It returns the array of products directly.
+        const products = await db.any('SELECT id, updated_at FROM products WHERE is_archived = false');
 
         // CHANGE THIS TO YOUR REAL DOMAIN
         const baseUrl = 'https://www.protodesignstudio.com';
@@ -27,7 +27,9 @@ router.get('/sitemap.xml', async (req, res) => {
 
         // Add dynamic product URLs
         products.forEach(product => {
+            // Handle null updated_at by falling back to current date or a default
             const date = product.updated_at ? new Date(product.updated_at).toISOString() : new Date().toISOString();
+
             xml += `
             <url>
                 <loc>${baseUrl}/product/${product.id}</loc>
