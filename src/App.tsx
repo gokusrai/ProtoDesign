@@ -123,7 +123,7 @@ const App = () => (
                                 {/* --- LEGAL PAGES --- */}
                                 <Route path="/terms-and-conditions" element={<TermsPage />} />
                                 <Route path="/privacy-policy" element={<PrivacyPage />} />
-                                <Route path="/refund-policy" element={<RefundPage />} />
+                                <Route path="/return-and-refund-policy" element={<RefundPage />} />
                                 <Route path="/shipping-policy" element={<ShippingPage />} />
                                 <Route path="/contact" element={<ContactPage />} />
 
