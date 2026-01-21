@@ -12,3 +12,6 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+# ✅ ADD THIS LINE (Use your real domain)
+Sitemap: https://www.protodesignstudio.com/sitemap.xml
