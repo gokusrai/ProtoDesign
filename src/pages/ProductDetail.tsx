@@ -39,6 +39,7 @@ import { useCart } from "@/hooks/use-cart";
 import { formatINR } from "@/lib/currency";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import { useDropzone } from 'react-dropzone';
+import {Helmet} from "react-helmet-async";
 
 // --- INTERFACES ---
 interface ProductImage {
@@ -591,6 +592,42 @@ const ProductDetail = () => {
         navigate(route);
     };
 
+    // --- SEO & SCHEMA GENERATION ---
+    const siteUrl = window.location.origin;
+    const currentUrl = `${siteUrl}/product/${productId}`;
+    // Get the first valid image
+    const productImage = activeImage || product?.image_url || '/placeholder.svg';
+    const fullImageUrl = productImage.startsWith('http') ? productImage : `${siteUrl}${productImage}`;
+
+    // Create Google Structured Data (JSON-LD)
+    const productSchema = product ? {
+        "@context": "https://schema.org/",
+        "@type": "Product",
+        "name": product.name,
+        "image": [fullImageUrl],
+        "description": product.short_description || product.description,
+        "sku": product.id,
+        "brand": {
+            "@type": "Brand",
+            "name": "ProtoDesign"
+        },
+        "offers": {
+            "@type": "Offer",
+            "url": currentUrl,
+            "priceCurrency": "INR",
+            "price": product.price,
+            "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+            "itemCondition": "https://schema.org/NewCondition"
+        },
+        ...(reviews.length > 0 && {
+            "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": product.average_rating || 0,
+                "reviewCount": product.review_count || reviews.length
+            }
+        })
+    } : null;
+
     if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
     if (!product) return null;
 
@@ -600,6 +637,29 @@ const ProductDetail = () => {
     const displaySpecs = normalizeSpecs(product.specifications);
 
     return (
+        <>
+            {product && (
+                <Helmet>
+                    {/* 1. Browser Tab & Search Results */}
+                    <title>{`${product.name} | ProtoDesign`}</title>
+                    <meta name="description" content={product.short_description || product.description.substring(0, 160)} />
+                    <link rel="canonical" href={currentUrl} />
+
+                    {/* 2. Social Media Previews (WhatsApp/Facebook) */}
+                    <meta property="og:title" content={product.name} />
+                    <meta property="og:description" content={product.short_description || product.description.substring(0, 160)} />
+                    <meta property="og:image" content={fullImageUrl} />
+                    <meta property="og:url" content={currentUrl} />
+                    <meta property="og:type" content="product" />
+                    <meta property="product:price:amount" content={product.price.toString()} />
+                    <meta property="product:price:currency" content="INR" />
+
+                    {/* 3. Google Structured Data (The "Secret Sauce") */}
+                    <script type="application/ld+json">
+                        {JSON.stringify(productSchema)}
+                    </script>
+                </Helmet>
+            )}
         <div className="min-h-screen bg-background pt-24 pb-16 font-sans relative">
 
             {/* --- ADMIN EDIT BAR --- */}
@@ -1039,6 +1099,7 @@ const ProductDetail = () => {
                 )}
             </div>
         </div>
+        </>
     );
 };
 

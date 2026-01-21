@@ -14,13 +14,14 @@ import cartRoutes from './src/routes/cart.routes.js';
 import quotesRoutes from './src/routes/quotes.routes.js';
 import errorHandler from './src/middleware/errorHandler.js';
 import userRoutes from './src/routes/user.routes.js';
+import sitemapRoutes from './src/routes/sitemap.routes.js';
 
 const app = express();
 
 // ============================================
 // 1. SECURITY MIDDLEWARE (Updated)
 // ============================================
-
+app.use('/', sitemapRoutes);
 // Allow Google Login Popups and Cross-Origin Images
 app.use(helmet({
     crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
