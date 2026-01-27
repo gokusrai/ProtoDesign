@@ -20,7 +20,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Profile from "./pages/Profile";
 import BulkUpload from "./pages/BulkUpload.tsx";
-import { TermsPage, PrivacyPage, RefundPage, ShippingPage, ContactPage } from "@/pages/Legal.tsx";
+import { TermsPage, PrivacyPage, RefundPage, ReturnPage, ShippingPage, ContactPage } from "@/pages/Legal.tsx";
 import { Footer } from "@/components/Footer"; // ✅ 1. Import Footer
 import ScrollToTop from "@/components/ScrollToTop";
 
@@ -123,7 +123,8 @@ const App = () => (
                                 {/* --- LEGAL PAGES --- */}
                                 <Route path="/terms-and-conditions" element={<TermsPage />} />
                                 <Route path="/privacy-policy" element={<PrivacyPage />} />
-                                <Route path="/return-and-refund-policy" element={<RefundPage />} />
+                                <Route path="/return-policy" element={<RefundPage />} />
+                                <Route path="/refund-policy" element={<ReturnPage />} />
                                 <Route path="/shipping-policy" element={<ShippingPage />} />
                                 <Route path="/contact" element={<ContactPage />} />
 

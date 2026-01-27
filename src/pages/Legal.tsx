@@ -140,7 +140,7 @@ export const PrivacyPage = () => (
 
 // --- 3. REFUND POLICY ---
 export const RefundPage = () => (
-    <LegalPageLayout title="Return & Refund Policy" lastUpdated="January 12, 2026">
+    <LegalPageLayout title="Refund Policy" lastUpdated="January 12, 2026">
         <div className="p-4 bg-primary/10 border-l-4 border-primary rounded-r-md mb-6">
             <p className="font-medium text-foreground">
                 <strong>Standard Returns:</strong> We accept returns for manufacturing defects reported within 7 days.
@@ -159,17 +159,33 @@ export const RefundPage = () => (
             <li>In case of any refunds approved by ProtoDesign, it will take 7 days for the refund to be processed to you.</li>
         </ul>
 
-        <h3>2. Returns</h3>
+        <h3>2. Custom 3D Printing</h3>
         <p>
-            We offer refund / exchange within first 7 days from the date of your purchase. If 7 days have passed since your purchase, you will not be offered a return, exchange or refund of any kind. In order to become eligible for a return or an exchange, (i) the purchased item should be unused and in the same condition as you received it, (ii) the item must have original packaging, (iii) if the item that you purchased on a sale, then the item may not be eligible for a return / exchange. Further, only such items are replaced by us (based on an exchange request), if such items are found defective or damaged.
+            Due to the personalized nature of Custom 3D Printing services, these orders are <strong>non-refundable</strong> unless the printed part is broken upon arrival or significantly deviates from the design file provided.
+        </p>
+    </LegalPageLayout>
+);
+
+// --- 3. REFUND POLICY ---
+export const ReturnPage = () => (
+    <LegalPageLayout title="Return Policy" lastUpdated="January 12, 2026">
+        <div className="p-4 bg-primary/10 border-l-4 border-primary rounded-r-md mb-6">
+            <p className="font-medium text-foreground">
+                <strong>Standard Returns:</strong> We accept returns for manufacturing defects reported within 7 days.
+            </p>
+        </div>
+
+        <h3>1. Returns</h3>
+        <p>
+            We offer return / exchange within first 7 days from the date of your purchase. If 7 days have passed since your purchase, you will not be offered a return, exchange or refund of any kind. In order to become eligible for a return or an exchange, (i) the purchased item should be unused and in the same condition as you received it, (ii) the item must have original packaging, (iii) if the item that you purchased on a sale, then the item may not be eligible for a return / exchange. Further, only such items are replaced by us (based on an exchange request), if such items are found defective or damaged.
         </p>
         <p>
             You agree that there may be a certain category of products / items that are exempted from returns or refunds. Such categories of the products would be identified to you at the item of purchase. For exchange / return accepted request(s) (as applicable), once your returned product / item is received and inspected by us, we will send you an email to notify you about receipt of the returned / exchanged product. Further. If the same has been approved after the quality check at our end, your request (i.e. return / exchange) will be processed in accordance with our policies.
         </p>
 
-        <h3>3. Custom 3D Printing</h3>
+        <h3>2. Custom 3D Printing</h3>
         <p>
-            Due to the personalized nature of Custom 3D Printing services, these orders are <strong>non-refundable</strong> unless the printed part is broken upon arrival or significantly deviates from the design file provided.
+            Due to the personalized nature of Custom 3D Printing services, these orders are <strong>non-returnable</strong> unless the printed part is broken upon arrival or significantly deviates from the design file provided.
         </p>
     </LegalPageLayout>
 );
