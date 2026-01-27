@@ -147,29 +147,29 @@ export const RefundPage = () => (
             </p>
         </div>
 
-        <h3>1. Returns & Replacements</h3>
+        <h3>1. Refund/Cancellation</h3>
         <p>
             We prioritize quality. Returns or replacements are accepted ONLY under the following conditions:
         </p>
         <ul className="list-disc pl-5">
-            <li><strong>Manufacturing Defect:</strong> If the product (3D Printer/Hardware) is found to be defective within <strong>7 days</strong> of delivery.</li>
-            <li><strong>Damage on Arrival:</strong> If the package arrives physically damaged. You must provide an unboxing video as proof within 24 hours.</li>
-            <li><strong>Wrong Product:</strong> If you received an item different from what you ordered.</li>
+            <li>Cancellations will only be considered if the request is made 7 days of placing the order. However, cancellation requests may not be entertained if the orders have been communicated to such sellers / merchant(s) listed on the Platform and they have initiated the process of shipping them, or the product is out for delivery. In such an event, you may choose to reject the product at the doorstep.</li>
+            <li>ProtoDesign does not accept cancellation requests for perishable items like flowers, eatables, etc. However, the refund / replacement can be made if the user establishes that the quality of the product delivered is not good.</li>
+            <li>In case of receipt of damaged or defective items, please report to our customer service team. The request would be entertained once the seller/ merchant listed on the Platform, has checked and determined the same at its own end. This should be reported within 7 days of receipt of products. In case you feel that the product received is not as shown on the site or as per your expectations, you must bring it to the notice of our customer service within 7 days of receiving the product. The customer service team after looking into your complaint will take an appropriate decision.</li>
+            <li>In case of complaints regarding the products that come with a warranty from the manufacturers, please refer the issue to them.</li>
+            <li>In case of any refunds approved by ProtoDesign, it will take 7 days for the refund to be processed to you.</li>
         </ul>
 
-        <h3>2. Custom 3D Printing</h3>
+        <h3>2. Returns</h3>
+        <p>
+            We offer refund / exchange within first 7 days from the date of your purchase. If 7 days have passed since your purchase, you will not be offered a return, exchange or refund of any kind. In order to become eligible for a return or an exchange, (i) the purchased item should be unused and in the same condition as you received it, (ii) the item must have original packaging, (iii) if the item that you purchased on a sale, then the item may not be eligible for a return / exchange. Further, only such items are replaced by us (based on an exchange request), if such items are found defective or damaged.
+        </p>
+        <p>
+            You agree that there may be a certain category of products / items that are exempted from returns or refunds. Such categories of the products would be identified to you at the item of purchase. For exchange / return accepted request(s) (as applicable), once your returned product / item is received and inspected by us, we will send you an email to notify you about receipt of the returned / exchanged product. Further. If the same has been approved after the quality check at our end, your request (i.e. return / exchange) will be processed in accordance with our policies.
+        </p>
+
+        <h3>3. Custom 3D Printing</h3>
         <p>
             Due to the personalized nature of Custom 3D Printing services, these orders are <strong>non-refundable</strong> unless the printed part is broken upon arrival or significantly deviates from the design file provided.
-        </p>
-
-        <h3>3. Cancellation Policy</h3>
-        <p>
-            Orders can be cancelled within <strong>12 hours</strong> of placement if they have not yet been dispatched. Once shipped, orders cannot be cancelled.
-        </p>
-
-        <h3>4. Refund Timeline</h3>
-        <p>
-            Once a return is approved and the item is received at our warehouse, refunds are initiated within 48 hours. The amount will reflect in your original payment source within <strong>5-7 working days</strong>.
         </p>
     </LegalPageLayout>
 );
