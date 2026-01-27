@@ -157,6 +157,7 @@ export const RefundPage = () => (
             <li>In case of receipt of damaged or defective items, please report to our customer service team. The request would be entertained once the seller/ merchant listed on the Platform, has checked and determined the same at its own end. This should be reported within 7 days of receipt of products. In case you feel that the product received is not as shown on the site or as per your expectations, you must bring it to the notice of our customer service within 7 days of receiving the product. The customer service team after looking into your complaint will take an appropriate decision.</li>
             <li>In case of complaints regarding the products that come with a warranty from the manufacturers, please refer the issue to them.</li>
             <li>In case of any refunds approved by ProtoDesign, it will take 7 days for the refund to be processed to you.</li>
+            <li>If any damaged/defective/replacement products are inspected and accepted then it will be delivered within 5 to 7 business days </li>
         </ul>
 
         <h3>2. Custom 3D Printing</h3>
