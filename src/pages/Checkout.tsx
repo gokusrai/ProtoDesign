@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { PaymentGatewaySelector } from '@/components/PaymentGatewaySelector';
 import { formatINR } from '@/lib/currency';
 import { toast } from 'sonner';
-import { Loader2, MapPin } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import {
     Select,
@@ -34,9 +34,11 @@ const Checkout = () => {
     const navigate = useNavigate();
     const { items, total, clearCart } = useCart();
     const [loading, setLoading] = useState(false);
-    const [selectedGateway, setSelectedGateway] = useState('razorpay');
 
-    // 🔥 NEW: Address State
+    // Default to PhonePe
+    const [selectedGateway, setSelectedGateway] = useState('phonepe');
+
+    // Address State
     const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
     const [selectedAddressId, setSelectedAddressId] = useState('new');
 
@@ -57,16 +59,19 @@ const Checkout = () => {
     const finalTotal = subtotal + gst + shipping;
 
     useEffect(() => {
-        if (!apiService.isAuthenticated()) {
-            toast.error('Please log in to place an order');
-            navigate('/auth');
-            return;
+        const checkAuth = async () => {
+            const user = await apiService.getCurrentUser();
+            if (!user) {
+                toast.error('Please log in to place an order');
+                navigate('/auth');
+            }
         }
+        checkAuth();
+
         if (items.length === 0) {
             navigate('/cart');
         }
 
-        // 🔥 NEW: Fetch Addresses
         loadAddresses();
     }, [items.length, navigate]);
 
@@ -74,7 +79,6 @@ const Checkout = () => {
         try {
             const addrs = await apiService.getAddresses();
             setSavedAddresses(addrs);
-            // Optional: Auto-select default
             const def = addrs.find((a: any) => a.is_default);
             if(def) handleAddressSelect(def.id, addrs);
         } catch (e) { console.error("Failed to load addresses", e); }
@@ -140,12 +144,13 @@ const Checkout = () => {
         try {
             await apiService.getCurrentUser();
 
+            // ✅ FIX 1: Send 'product_id', NOT 'item.id' (which is the cart item ID)
             const orderItems = items.map((item) => ({
-                product_id: item.product_id,
+                product_id: item.product.id, // Correctly access nested product ID
                 quantity: item.quantity,
             }));
 
-            await apiService.createOrder(
+            const response = await apiService.createOrder(
                 orderItems,
                 finalTotal,
                 formData,
@@ -153,11 +158,19 @@ const Checkout = () => {
                 shipping
             );
 
-            toast.success('Order placed successfully! Redirecting...');
+            if (response && response.redirectUrl) {
+                toast.loading('Redirecting to Payment Gateway...');
+                await clearCart();
+                window.location.href = response.redirectUrl;
+                return;
+            }
+
+            toast.success('Order placed successfully!');
             await clearCart();
             setTimeout(() => {
                 navigate('/orders');
             }, 2000);
+
         } catch (error: any) {
             console.error('Order error:', error);
             toast.error(error.message || 'Failed to place order');
@@ -177,8 +190,6 @@ const Checkout = () => {
                         <Card className="p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-2xl font-semibold">Shipping Details</h2>
-
-                                {/* 🔥 NEW: Saved Address Selector (Subtle) */}
                                 {savedAddresses.length > 0 && (
                                     <div className="w-[200px]">
                                         <Select value={selectedAddressId} onValueChange={(val) => handleAddressSelect(val)}>
@@ -188,7 +199,7 @@ const Checkout = () => {
                                             <SelectContent>
                                                 <SelectItem value="new">Use New Address</SelectItem>
                                                 {savedAddresses.map(addr => (
-                                                    <SelectItem key={addr.id} value={addr.id}>{addr.label} - {addr.full_name}</SelectItem>
+                                                    <SelectItem key={addr.id} value={addr.id}>{addr.label || 'Home'} - {addr.full_name}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -317,7 +328,8 @@ const Checkout = () => {
 
                             <div className="space-y-3 mb-4">
                                 {items.map((item) => (
-                                    <div key={item.product_id} className="flex justify-between text-sm">
+                                    <div key={item.id} className="flex justify-between text-sm">
+                                        {/* ✅ FIX 2: Access properties via item.product */}
                                         <span>{item.product.name} × {item.quantity}</span>
                                         <span>{formatINR(item.product.price * item.quantity)}</span>
                                     </div>

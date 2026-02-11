@@ -2,7 +2,7 @@ import express from 'express';
 import db from '../config/database.js';
 import authMiddleware from '../middleware/auth.js';
 import { emailService } from '../services/email.service.js';
-
+import { phonePeService } from '../services/phonepe.service.js';
 const router = express.Router();
 
 // ==========================================
@@ -60,6 +60,7 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
  */
 router.get('/', authMiddleware, async (req, res, next) => {
     try {
+        // 1. Fetch Orders from Database
         const orders = await db.any(`
             SELECT
                 o.id, o.created_at, o.status,
@@ -83,7 +84,39 @@ router.get('/', authMiddleware, async (req, res, next) => {
             ORDER BY o.created_at DESC
         `, [req.userId]);
 
-        res.json({ success: true, data: orders });
+        // 2. ✅ AUTO-VERIFY: If any order is 'pending', check real status with PhonePe
+        const updatedOrders = await Promise.all(orders.map(async (order) => {
+            if (order.status === 'pending' && order.payment_gateway === 'phonepe') {
+                try {
+                    console.log(`Checking status for pending order: ${order.id}`);
+                    const statusData = await phonePeService.verifyPaymentStatus(order.id);
+
+                    // Logic to update status based on PhonePe response
+                    if (statusData.code === 'PAYMENT_SUCCESS' || statusData.state === 'COMPLETED') {
+                        await db.none(
+                            "UPDATE orders SET status = 'processing', payment_status = 'paid', updated_at = NOW() WHERE id = $1",
+                            [order.id]
+                        );
+                        order.status = 'processing'; // Update local object for UI
+                    } else if (
+                        statusData.code === 'PAYMENT_ERROR' ||
+                        statusData.code === 'PAYMENT_DECLINED' ||
+                        statusData.state === 'FAILED'
+                    ) {
+                        await db.none(
+                            "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
+                            [order.id]
+                        );
+                        order.status = 'cancelled'; // Update local object for UI
+                    }
+                } catch (err) {
+                    console.error(`Auto-verify failed for ${order.id}:`, err.message);
+                }
+            }
+            return order;
+        }));
+
+        res.json({ success: true, data: updatedOrders });
     } catch (error) {
         next(error);
     }
@@ -205,6 +238,32 @@ router.post('/', authMiddleware, async (req, res, next) => {
             return order;
         });
 
+        // 4. Handle PhonePe Payment
+        if (paymentGateway === 'phonepe' || paymentGateway === 'PHONEPE') {
+            try {
+                const redirectUrl = await phonePeService.initiatePayment(
+                    newOrder.id,
+                    totalAmount,
+                    req.userId,
+                    shippingAddress.phone || '9999999999'
+                );
+
+                return res.status(201).json({
+                    success: true,
+                    orderId: newOrder.id,
+                    redirectUrl: redirectUrl
+                });
+            } catch (err) {
+                console.error("PhonePe Error:", err);
+
+                // 🔥 CHANGE: Send error to frontend instead of success
+                return res.status(400).json({
+                    success: false,
+                    error: "Payment Initiation Failed: " + (err.message || "Unknown Error")
+                });
+            }
+        }
+
         // 6. Send Email (Async)
         db.oneOrNone('SELECT email, full_name FROM users WHERE id = $1', [req.userId])
             .then(async (user) => {
@@ -226,6 +285,44 @@ router.post('/', authMiddleware, async (req, res, next) => {
     } catch (error) {
         console.error('Order Error:', error);
         next(error);
+    }
+});
+
+router.post('/payment/callback', async (req, res) => {
+    try {
+        const { merchantOrderId, state, code } = req.body;
+
+        if (state === 'COMPLETED' || state === 'SUCCESS' || code === 'PAYMENT_SUCCESS') {
+            // ... (Existing Success Logic) ...
+            const verification = await phonePeService.verifyPaymentStatus(merchantOrderId);
+            if (verification.state === 'COMPLETED' || verification.code === 'PAYMENT_SUCCESS') {
+                await db.none(
+                    `UPDATE orders
+                     SET status = 'processing', payment_status = 'paid', updated_at = NOW()
+                     WHERE id = $1`,
+                    [merchantOrderId]
+                );
+                console.log(`✅ Payment Verified: Order ${merchantOrderId} is PAID`);
+            }
+        }
+        // ✅ NEW: Handle Failures & Cancellations
+        else if (state === 'FAILED' || state === 'PAYMENT_ERROR' || state === 'PAYMENT_DECLINED') {
+            await db.none(
+                `UPDATE orders 
+                 SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() 
+                 WHERE id = $1`,
+                [merchantOrderId]
+            );
+            console.log(`❌ Payment Failed: Order ${merchantOrderId} marked as CANCELLED`);
+        }
+        else {
+            console.log(`⚠️ Payment Pending/Unknown: ${merchantOrderId} is ${state}`);
+        }
+
+        res.json({ status: 'ok' });
+    } catch (error) {
+        console.error('Callback Error:', error.message);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
