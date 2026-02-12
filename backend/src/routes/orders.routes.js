@@ -85,9 +85,6 @@ router.get('/', authMiddleware, async (req, res, next) => {
                 try {
                     const statusData = await phonePeService.verifyPaymentStatus(order.id);
 
-                    // console.log(`🔹 Status Response for ${order.id}:`, JSON.stringify(statusData));
-
-                    // ✅ FIX: Access 'state' from Root OR Nested Data
                     const state = statusData.state || (statusData.data && statusData.data.state);
                     const code = statusData.code || statusData.responseCode;
 
@@ -104,7 +101,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
                         code === 'PAYMENT_ERROR' ||
                         code === 'PAYMENT_DECLINED' ||
                         code === 'PAYMENT_CANCELLED' ||
-                        state === 'FAILED' ||       // <--- This matches your log output
+                        state === 'FAILED' ||
                         state === 'CANCELLED' ||
                         state === 'DECLINED'
                     ) {
@@ -117,10 +114,36 @@ router.get('/', authMiddleware, async (req, res, next) => {
                 } catch (err) {
                     console.error(`Auto-verify failed for ${order.id}:`, err.message);
 
-                    // Fail-safe for 400/404 errors which often mean "Invalid ID" or "Cancelled"
+                    // ✅ FIX 1: Check for HTTP error responses
                     if (err.response) {
                         const errCode = err.response.status;
+                        // 404 = transaction not found (likely cancelled before completing)
+                        // 400 = bad request (often invalid/cancelled transaction)
                         if (errCode === 404 || errCode === 400) {
+                            await db.none(
+                                "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
+                                [order.id]
+                            );
+                            order.status = 'cancelled';
+                        }
+                    }
+                    // ✅ FIX 2: Handle network/timeout errors
+                    else if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND') {
+                        // Network issue - mark as cancelled after timeout
+                        console.log(`Network error for ${order.id}, marking as cancelled`);
+                        await db.none(
+                            "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
+                            [order.id]
+                        );
+                        order.status = 'cancelled';
+                    }
+                    // ✅ FIX 3: For old pending orders (over 15 mins), assume cancelled
+                    else {
+                        const orderAge = Date.now() - new Date(order.created_at).getTime();
+                        const fifteenMinutes = 15 * 60 * 1000;
+
+                        if (orderAge > fifteenMinutes) {
+                            console.log(`Order ${order.id} is ${Math.round(orderAge/60000)} mins old, marking as cancelled`);
                             await db.none(
                                 "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
                                 [order.id]
@@ -132,6 +155,7 @@ router.get('/', authMiddleware, async (req, res, next) => {
             }
             return order;
         }));
+
 
         res.json({ success: true, data: updatedOrders });
     } catch (error) {
