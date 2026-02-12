@@ -24,7 +24,7 @@ dist-ssr
 *.sw?
 
 
-# Security - Ignore environment variables
-#.env
-#.env.production
-#backend/.env
+
+.env
+.env.production
+backend/.env
