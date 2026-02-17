@@ -1,8 +1,8 @@
 import express from 'express';
 import multer from 'multer';
-import db from '../config/database.js';
-import { storageService } from '../services/storage.service.js';
-import authMiddleware from '../middleware/auth.js';
+import db from '../config/database.js'; //
+import { storageService } from '../services/storage.service.js'; //
+import authMiddleware from '../middleware/auth.js'; //
 
 const router = express.Router();
 
@@ -10,6 +10,18 @@ const upload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 50 * 1024 * 1024 },
 });
+
+// ✅ Helper function to generate unique SEO slugs
+const generateUniqueSlug = (name) => {
+    const baseSlug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
+        .replace(/(^-|-$)/g, '');    // Trim leading/trailing hyphens
+    
+    // Append a short random suffix to guarantee uniqueness and avoid SQL constraint errors
+    const suffix = Math.random().toString(36).substring(2, 6);
+    return `${baseSlug}-${suffix}`;
+};
 
 // ✅ Robust Admin Middleware
 const isAdmin = async (req, res, next) => {
@@ -101,7 +113,7 @@ const formatImageUrl = (url) => {
     return url;
 };
 
-// BULK UPLOAD ROUTE
+// ✅ BULK UPLOAD ROUTE (Updated for unique slugs)
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
     console.log("📂 Received Bulk Upload");
     try {
@@ -127,14 +139,17 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                 let desc = p.description || "";
                 desc = desc.replace(/\\n/g, '\n');
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
+                
+                // Generate a unique slug for the new product
+                const slug = generateUniqueSlug(p.name);
 
                 const product = await db.one(
                     `INSERT INTO products (
-                        name, price, stock, category, sub_category,
+                        name, slug, price, stock, category, sub_category,
                         short_description, description, specifications
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
                     [
-                        p.name, parseFloat(rawPrice), parseInt(rawStock),
+                        p.name, slug, parseFloat(rawPrice), parseInt(rawStock),
                         cat, p.sub_category || '', p.short_description || '', desc, specs
                     ]
                 );
@@ -146,14 +161,11 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                     for (let i = 0; i < urls.length; i++) {
                         const directUrl = formatImageUrl(urls[i]);
                         try {
-                            console.log(`   ☁️ Uploading Image ${i+1}/${urls.length} for ${p.name}`);
                             const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products');
-
                             await db.none(
                                 'INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)',
                                 [product.id, cloudUrl, i]
                             );
-
                             if (i === 0) {
                                 await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
                             }
@@ -223,7 +235,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        // ✅ UPDATED: Check if the parameter matches either the ID OR the SLUG for SEO compatibility
+        // ✅ Check if parameter matches either ID OR SLUG for SEO compatibility
         const product = await db.oneOrNone(
             'SELECT * FROM products WHERE id = $1 OR slug = $1', 
             [req.params.id]
@@ -295,6 +307,7 @@ router.post('/:id/like', authMiddleware, async (req, res) => {
 });
 
 // ADMIN ROUTES
+// ✅ Updated Admin Create route to handle unique slugs
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
@@ -304,10 +317,12 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
+        const slug = generateUniqueSlug(name);
+
         const product = await db.one(
-            `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url, is_archived)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [name, description, short_description, price, category, stock, specifications, videoUrl, is_archived === 'true']
+            `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, video_url, is_archived)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [name, slug, description, short_description, price, category, stock, specifications, videoUrl, is_archived === 'true']
         );
 
         if (req.files && req.files['images']) {
@@ -324,15 +339,19 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// ✅ Updated Admin Update route to refresh slug if name changes
 router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
+        
+        // Generate a new unique slug if the product is renamed
+        const slug = generateUniqueSlug(name);
 
         await db.none(
             `UPDATE products
-             SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, is_archived=$8, updated_at=NOW()
-             WHERE id=$9`,
-            [name, description, short_description, price, category, stock, specifications, is_archived === 'true', req.params.id]
+             SET name=$1, slug=$2, description=$3, short_description=$4, price=$5, category=$6, stock=$7, specifications=$8, is_archived=$9, updated_at=NOW()
+             WHERE id=$10`,
+            [name, slug, description, short_description, price, category, stock, specifications, is_archived === 'true', req.params.id]
         );
 
         if (req.files && req.files['video']) {
