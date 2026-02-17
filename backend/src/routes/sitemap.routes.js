@@ -5,11 +5,9 @@ const router = express.Router();
 
 router.get('/sitemap.xml', async (req, res) => {
     try {
-        // FIX: Use db.any() which is the correct pg-promise method for multiple rows
-        // It returns the array of products directly.
-        const products = await db.any('SELECT id, updated_at FROM products WHERE is_archived = false');
+        // Fetch id, slug, and updated_at for all non-archived products
+        const products = await db.any('SELECT id, slug, updated_at FROM products WHERE is_archived = false');
 
-        // CHANGE THIS TO YOUR REAL DOMAIN
         const baseUrl = 'https://www.protodesignstudio.com';
 
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -27,12 +25,15 @@ router.get('/sitemap.xml', async (req, res) => {
 
         // Add dynamic product URLs
         products.forEach(product => {
-            // Handle null updated_at by falling back to current date or a default
+            // Handle null updated_at by falling back to current date
             const date = product.updated_at ? new Date(product.updated_at).toISOString() : new Date().toISOString();
+            
+            // SEO IMPROVEMENT: Use slug if it exists, otherwise fall back to ID
+            const productIdentifier = product.slug || product.id;
 
             xml += `
             <url>
-                <loc>${baseUrl}/product/${product.id}</loc>
+                <loc>${baseUrl}/product/${productIdentifier}</loc>
                 <lastmod>${date}</lastmod>
                 <changefreq>weekly</changefreq>
                 <priority>0.7</priority>
