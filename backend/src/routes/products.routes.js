@@ -11,7 +11,7 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ Robust Admin Middleware (Unchanged)
+// ✅ Robust Admin Middleware
 const isAdmin = async (req, res, next) => {
     try {
         let role = null;
@@ -38,7 +38,7 @@ const isAdmin = async (req, res, next) => {
     }
 };
 
-// ... (CSV Parser and Helper functions omitted for brevity, they remain the same) ...
+// Helper function to parse CSV files
 const parseCSV = (buffer) => {
     const text = buffer.toString();
     const rows = [];
@@ -71,6 +71,7 @@ const parseCSV = (buffer) => {
     });
 };
 
+// Helper function to parse specifications string
 const parseSpecs = (str) => {
     if (!str) return {};
     const specs = {};
@@ -88,6 +89,7 @@ const parseSpecs = (str) => {
     return specs;
 };
 
+// Helper to format Google Drive URLs
 const formatImageUrl = (url) => {
     if (!url) return null;
     if (url.includes('drive.google.com')) {
@@ -99,9 +101,8 @@ const formatImageUrl = (url) => {
     return url;
 };
 
-// BULK UPLOAD ROUTE (Unchanged)
+// BULK UPLOAD ROUTE
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
-    // ... (Existing implementation)
     console.log("📂 Received Bulk Upload");
     try {
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
@@ -138,15 +139,12 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                     ]
                 );
 
-                // Handle Images
                 if (p.images) {
                     let rawImages = p.images.replace(/\\n/g, '\n');
                     const urls = rawImages.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(u => u.length > 0);
 
                     for (let i = 0; i < urls.length; i++) {
-                        // This now correctly converts your "open?id=" links
                         const directUrl = formatImageUrl(urls[i]);
-
                         try {
                             console.log(`   ☁️ Uploading Image ${i+1}/${urls.length} for ${p.name}`);
                             const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products');
@@ -164,7 +162,6 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                         }
                     }
                 }
-
                 results.success++;
             } catch (err) {
                 console.error(`Row Error (${p.name}):`, err.message);
@@ -172,7 +169,6 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                 results.errors.push(`Failed ${p.name}: ${err.message}`);
             }
         }
-
         res.json({ message: 'Bulk processing complete', results });
     } catch (error) {
         console.error("Bulk Error:", error);
@@ -227,7 +223,12 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        const product = await db.oneOrNone('SELECT * FROM products WHERE id = $1', [req.params.id]);
+        // ✅ UPDATED: Check if the parameter matches either the ID OR the SLUG for SEO compatibility
+        const product = await db.oneOrNone(
+            'SELECT * FROM products WHERE id = $1 OR slug = $1', 
+            [req.params.id]
+        );
+
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
@@ -270,8 +271,8 @@ router.post('/:id/reviews', authMiddleware, async (req, res) => {
         );
         await db.none(`
             UPDATE products SET
-                                average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1),
-                                review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = $1)
+                average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1),
+                review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = $1)
             WHERE id = $1
         `, [req.params.id]);
         res.json(review);
@@ -296,7 +297,6 @@ router.post('/:id/like', authMiddleware, async (req, res) => {
 // ADMIN ROUTES
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
-        // ✅ Added is_archived to destructured variables
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
         let videoUrl = null;
 
@@ -304,7 +304,6 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
             videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
         }
 
-        // ✅ Updated INSERT to include is_archived
         const product = await db.one(
             `INSERT INTO products (name, description, short_description, price, category, stock, specifications, video_url, is_archived)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
@@ -327,10 +326,8 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
 
 router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
-        // ✅ Added is_archived to destructured variables
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
 
-        // ✅ Update Query now includes is_archived
         await db.none(
             `UPDATE products
              SET name=$1, description=$2, short_description=$3, price=$4, category=$5, stock=$6, specifications=$7, is_archived=$8, updated_at=NOW()
@@ -365,18 +362,15 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// ✅ UPDATED: Delete Route with Permanent option
 router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
     try {
         if (req.query.permanent === 'true') {
-            // Hard Delete
             await db.none('DELETE FROM product_images WHERE product_id = $1', [req.params.id]);
             await db.none('DELETE FROM reviews WHERE product_id = $1', [req.params.id]);
             await db.none('DELETE FROM product_likes WHERE product_id = $1', [req.params.id]);
             await db.none('DELETE FROM products WHERE id = $1', [req.params.id]);
             res.json({ message: 'Deleted permanently' });
         } else {
-            // Soft Delete (Archive)
             await db.none('UPDATE products SET is_archived = true WHERE id = $1', [req.params.id]);
             res.json({ message: 'Archived' });
         }
