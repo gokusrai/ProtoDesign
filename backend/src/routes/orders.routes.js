@@ -55,7 +55,6 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
  */
 router.get('/', authMiddleware, async (req, res, next) => {
     try {
-        // 1. Fetch Orders from Database
         const orders = await db.any(`
             SELECT
                 o.id, o.created_at, o.status,
@@ -79,16 +78,13 @@ router.get('/', authMiddleware, async (req, res, next) => {
             ORDER BY o.created_at DESC
         `, [req.userId]);
 
-        // 2. ✅ AUTO-VERIFY: Fixed logic for cancellations based on your logs
         const updatedOrders = await Promise.all(orders.map(async (order) => {
             if (order.status === 'pending' && order.payment_gateway === 'phonepe') {
                 try {
                     const statusData = await phonePeService.verifyPaymentStatus(order.id);
-
                     const state = statusData.state || (statusData.data && statusData.data.state);
                     const code = statusData.code || statusData.responseCode;
 
-                    // Success Condition
                     if (code === 'PAYMENT_SUCCESS' || state === 'COMPLETED' || state === 'SUCCESS') {
                         await db.none(
                             "UPDATE orders SET status = 'processing', payment_status = 'paid', updated_at = NOW() WHERE id = $1",
@@ -96,14 +92,10 @@ router.get('/', authMiddleware, async (req, res, next) => {
                         );
                         order.status = 'processing';
                     }
-                    // Failure / Cancellation Condition
                     else if (
-                        code === 'PAYMENT_ERROR' ||
-                        code === 'PAYMENT_DECLINED' ||
-                        code === 'PAYMENT_CANCELLED' ||
-                        state === 'FAILED' ||
-                        state === 'CANCELLED' ||
-                        state === 'DECLINED'
+                        code === 'PAYMENT_ERROR' || code === 'PAYMENT_DECLINED' ||
+                        code === 'PAYMENT_CANCELLED' || state === 'FAILED' ||
+                        state === 'CANCELLED' || state === 'DECLINED'
                     ) {
                         await db.none(
                             "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
@@ -113,41 +105,19 @@ router.get('/', authMiddleware, async (req, res, next) => {
                     }
                 } catch (err) {
                     console.error(`Auto-verify failed for ${order.id}:`, err.message);
-
-                    // ✅ FIX 1: Check for HTTP error responses
                     if (err.response) {
                         const errCode = err.response.status;
-                        // 404 = transaction not found (likely cancelled before completing)
-                        // 400 = bad request (often invalid/cancelled transaction)
                         if (errCode === 404 || errCode === 400) {
-                            await db.none(
-                                "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
-                                [order.id]
-                            );
+                            await db.none("UPDATE orders SET status = 'cancelled' WHERE id = $1", [order.id]);
                             order.status = 'cancelled';
                         }
-                    }
-                    // ✅ FIX 2: Handle network/timeout errors
-                    else if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || err.code === 'ENOTFOUND') {
-                        // Network issue - mark as cancelled after timeout
-                        console.log(`Network error for ${order.id}, marking as cancelled`);
-                        await db.none(
-                            "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
-                            [order.id]
-                        );
+                    } else if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+                        await db.none("UPDATE orders SET status = 'cancelled' WHERE id = $1", [order.id]);
                         order.status = 'cancelled';
-                    }
-                    // ✅ FIX 3: For old pending orders (over 15 mins), assume cancelled
-                    else {
+                    } else {
                         const orderAge = Date.now() - new Date(order.created_at).getTime();
-                        const fifteenMinutes = 15 * 60 * 1000;
-
-                        if (orderAge > fifteenMinutes) {
-                            console.log(`Order ${order.id} is ${Math.round(orderAge/60000)} mins old, marking as cancelled`);
-                            await db.none(
-                                "UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1",
-                                [order.id]
-                            );
+                        if (orderAge > 15 * 60 * 1000) {
+                            await db.none("UPDATE orders SET status = 'cancelled' WHERE id = $1", [order.id]);
                             order.status = 'cancelled';
                         }
                     }
@@ -155,7 +125,6 @@ router.get('/', authMiddleware, async (req, res, next) => {
             }
             return order;
         }));
-
 
         res.json({ success: true, data: updatedOrders });
     } catch (error) {
@@ -173,7 +142,6 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
             `SELECT * FROM orders WHERE id = $1 AND user_id = $2`,
             [id, req.userId]
         );
-
         if (!order) return res.status(404).json({ error: 'Order not found' });
         res.json({ success: true, data: order });
     } catch (error) {
@@ -183,6 +151,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 
 /**
  * POST /api/orders
+ * CREATION WITH DYNAMIC SHIPPING ENFORCEMENT
  */
 router.post('/', authMiddleware, async (req, res, next) => {
     try {
@@ -190,14 +159,29 @@ router.post('/', authMiddleware, async (req, res, next) => {
             return res.status(400).json({ error: 'Request body is empty.' });
         }
 
-        const { items, shippingAddress, paymentGateway, shippingAmount } = req.body;
-
+        const { items, shippingAddress, paymentGateway } = req.body;
         if (!items || !items.length) return res.status(400).json({ error: 'No items in order' });
 
+        // 1. Fetch Product details from DB for security and category check
         const productIds = items.map(i => i.product_id);
-        const products = await db.many('SELECT id, price, stock, name FROM products WHERE id IN ($1:csv)', [productIds]);
+        const products = await db.many('SELECT id, price, stock, name, category FROM products WHERE id IN ($1:csv)', [productIds]);
+        
         const productMap = {};
         products.forEach(p => productMap[p.id] = p);
+
+        // 2. ENFORCE BUSINESS RULES (Recalculate shipping based on DB verified categories)
+        const hasPrinter = products.some(p => p.category === '3d_printer');
+        
+        // Safety Check: Block COD for printers
+        if (hasPrinter && paymentGateway === 'cod') {
+            return res.status(400).json({ error: 'Cash on Delivery is not available for orders containing 3D Printers' });
+        }
+
+        // Logic: Printer = FREE | Standard (Online) = 199 | Standard (COD) = 300
+        let shippingAmount = 0.00;
+        if (!hasPrinter) {
+            shippingAmount = (paymentGateway === 'cod') ? 300.00 : 199.00;
+        }
 
         let subtotal = 0;
         const verifiedItems = [];
@@ -206,7 +190,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
             const product = productMap[item.product_id];
             if (!product) throw new Error(`Product not found: ${item.product_id}`);
             if (product.stock < item.quantity) {
-                return res.status(400).json({ error: `Not enough stock for ${product.name}. Available: ${product.stock}` });
+                return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
             }
             const quantity = parseInt(item.quantity) || 1;
             const lineTotal = parseFloat(product.price) * quantity;
@@ -214,9 +198,8 @@ router.post('/', authMiddleware, async (req, res, next) => {
             verifiedItems.push({ ...item, price: product.price, quantity, lineTotal });
         }
 
-        const shipping = shippingAmount !== undefined ? parseFloat(shippingAmount) : 50.00;
         const gst = subtotal * 0.18;
-        const totalAmount = subtotal + gst + shipping;
+        const totalAmount = subtotal + gst + shippingAmount;
 
         const newOrder = await db.tx(async t => {
             const order = await t.one(
@@ -224,7 +207,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
                  (user_id, subtotal_amount, tax_amount, shipping_amount, total_amount, shipping_address, payment_gateway, status)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
                      RETURNING *`,
-                [req.userId, subtotal, gst, shipping, totalAmount, JSON.stringify(shippingAddress), paymentGateway]
+                [req.userId, subtotal, gst, shippingAmount, totalAmount, JSON.stringify(shippingAddress), paymentGateway]
             );
 
             const queries = verifiedItems.map(item => {
@@ -234,10 +217,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
                          VALUES ($1, $2, $3, $4, $5)`,
                         [order.id, item.product_id, item.quantity, item.price, item.lineTotal]
                     ),
-                    t.none(
-                        `UPDATE products SET stock = stock - $1 WHERE id = $2`,
-                        [item.quantity, item.product_id]
-                    )
+                    t.none(`UPDATE products SET stock = stock - $1 WHERE id = $2`, [item.quantity, item.product_id])
                 ];
             });
 
@@ -245,6 +225,7 @@ router.post('/', authMiddleware, async (req, res, next) => {
             return order;
         });
 
+        // 3. Initiate Payment or Confirm COD
         if (paymentGateway === 'phonepe' || paymentGateway === 'PHONEPE') {
             try {
                 const redirectUrl = await phonePeService.initiatePayment(
@@ -255,19 +236,15 @@ router.post('/', authMiddleware, async (req, res, next) => {
                 );
                 return res.status(201).json({ success: true, orderId: newOrder.id, redirectUrl });
             } catch (err) {
-                console.error("PhonePe Error:", err);
-                return res.status(400).json({ success: false, error: "Payment Initiation Failed: " + (err.message || "Unknown Error") });
+                return res.status(400).json({ success: false, error: "Payment failed: " + err.message });
             }
         }
 
+        // Handle COD Email/Confirmation
         db.oneOrNone('SELECT email, full_name FROM users WHERE id = $1', [req.userId])
             .then(async (user) => {
                 if (user) {
-                    try {
-                        await emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems);
-                    } catch (emailErr) {
-                        console.error('❌ FAILED to send email:', emailErr);
-                    }
+                    await emailService.sendOrderConfirmation(user.email, newOrder.id, totalAmount, verifiedItems);
                 }
             });
 
@@ -284,45 +261,28 @@ router.post('/', authMiddleware, async (req, res, next) => {
 router.post('/payment/callback', async (req, res) => {
     try {
         let notification = req.body;
-
         if (req.body.response) {
-            try {
-                const decoded = Buffer.from(req.body.response, 'base64').toString('utf-8');
-                notification = JSON.parse(decoded);
-            } catch (e) {
-                console.error("❌ Callback Decode Failed:", e);
-                return res.status(400).json({ error: "Invalid callback" });
-            }
+            const decoded = Buffer.from(req.body.response, 'base64').toString('utf-8');
+            notification = JSON.parse(decoded);
         }
 
-        // ✅ FIX: Handle root level state here as well just in case
         const code = notification.code;
         const data = notification.data || {};
-        const merchantOrderId = data.merchantOrderId || data.merchantTransactionId || notification.orderId; // Fallback to root orderId
-        const state = data.state || notification.state; // Fallback to root state
+        const merchantOrderId = data.merchantOrderId || data.merchantTransactionId || notification.orderId;
+        const state = data.state || notification.state;
 
         if (!merchantOrderId) return res.status(400).json({ error: "Missing Order ID" });
 
         if (code === 'PAYMENT_SUCCESS' || state === 'COMPLETED' || state === 'SUCCESS') {
-            await db.none(
-                `UPDATE orders SET status = 'processing', payment_status = 'paid', updated_at = NOW() WHERE id = $1`,
-                [merchantOrderId]
-            );
+            await db.none(`UPDATE orders SET status = 'processing', payment_status = 'paid', updated_at = NOW() WHERE id = $1`, [merchantOrderId]);
         }
         else if (
-            code === 'PAYMENT_ERROR' ||
-            code === 'PAYMENT_DECLINED' ||
-            code === 'PAYMENT_CANCELLED' ||
-            state === 'FAILED' ||
-            state === 'CANCELLED' ||
-            state === 'DECLINED'
+            code === 'PAYMENT_ERROR' || code === 'PAYMENT_DECLINED' ||
+            code === 'PAYMENT_CANCELLED' || state === 'FAILED' ||
+            state === 'CANCELLED' || state === 'DECLINED'
         ) {
-            await db.none(
-                `UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1`,
-                [merchantOrderId]
-            );
+            await db.none(`UPDATE orders SET status = 'cancelled', payment_status = 'failed', updated_at = NOW() WHERE id = $1`, [merchantOrderId]);
         }
-
         res.json({ status: 'ok' });
     } catch (error) {
         console.error('Callback Error:', error.message);
@@ -330,9 +290,8 @@ router.post('/payment/callback', async (req, res) => {
     }
 });
 
-// ... (PUT /:id, Cancel, Address routes remain the same) ...
 /**
- * PUT /api/orders/:id
+ * PUT /api/orders/:id (Admin only)
  */
 router.put('/:id', authMiddleware, async (req, res, next) => {
     try {
@@ -344,7 +303,7 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
         const validStatuses = ['pending', 'pending_payment', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
 
         if (!status || !validStatuses.includes(status)) {
-            return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+            return res.status(400).json({ error: `Invalid status` });
         }
 
         const order = await db.oneOrNone(`UPDATE orders SET status = $1 WHERE id = $2 RETURNING *`, [status, id]);
@@ -369,50 +328,16 @@ router.put('/:id', authMiddleware, async (req, res, next) => {
 router.post('/:id/cancel', authMiddleware, async (req, res, next) => {
     try {
         const { id } = req.params;
-        const userId = req.userId;
-        const order = await db.oneOrNone('SELECT status, created_at FROM orders WHERE id = $1 AND user_id = $2', [id, userId]);
-
+        const order = await db.oneOrNone('SELECT status, created_at FROM orders WHERE id = $1 AND user_id = $2', [id, req.userId]);
         if (!order) return res.status(404).json({ error: 'Order not found' });
 
-        const allowCancel = ['pending', 'pending_payment', 'processing'];
-        if (!allowCancel.includes(order.status)) return res.status(400).json({ error: 'Order cannot be cancelled at this stage' });
+        if (!['pending', 'pending_payment', 'processing'].includes(order.status)) {
+            return res.status(400).json({ error: 'Order cannot be cancelled at this stage' });
+        }
 
-        await db.none(
-            `UPDATE orders SET status = 'cancelled', updated_at = NOW()
-             WHERE user_id = $1 AND DATE_TRUNC('second', created_at) = DATE_TRUNC('second', $2::timestamp)`,
-            [userId, order.created_at]
-        );
+        await db.none(`UPDATE orders SET status = 'cancelled', updated_at = NOW() WHERE id = $1`, [id]);
         res.json({ success: true, message: 'Order cancelled successfully' });
     } catch (error) {
-        console.error('Cancel order error:', error);
-        next(error);
-    }
-});
-
-/**
- * PUT /api/orders/:id/address
- */
-router.put('/:id/address', authMiddleware, async (req, res, next) => {
-    try {
-        const { id } = req.params;
-        const { address } = req.body;
-        const userId = req.userId;
-
-        if (!address) return res.status(400).json({ error: 'Address data required' });
-        const order = await db.oneOrNone('SELECT status, created_at FROM orders WHERE id = $1 AND user_id = $2', [id, userId]);
-
-        if (!order) return res.status(404).json({ error: 'Order not found' });
-        const allowEdit = ['pending', 'pending_payment', 'processing'];
-        if (!allowEdit.includes(order.status)) return res.status(400).json({ error: 'Cannot update address for shipped orders' });
-
-        await db.none(
-            `UPDATE orders SET shipping_address = $1, updated_at = NOW()
-             WHERE user_id = $2 AND DATE_TRUNC('second', created_at) = DATE_TRUNC('second', $3::timestamp)`,
-            [JSON.stringify(address), userId, order.created_at]
-        );
-        res.json({ success: true, message: 'Address updated successfully' });
-    } catch (error) {
-        console.error('Update address error:', error);
         next(error);
     }
 });
