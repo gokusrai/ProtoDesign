@@ -1,6 +1,8 @@
 import { v2 as cloudinary } from 'cloudinary';
 import streamifier from 'streamifier';
 import path from 'path';
+import sharp from 'sharp'; // High-performance processor
+import axios from 'axios';  // For fetching external images
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
