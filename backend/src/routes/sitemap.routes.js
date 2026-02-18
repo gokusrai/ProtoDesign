@@ -20,7 +20,9 @@ const escapeXml = (unsafe) => {
 router.get('/sitemap.xml', async (req, res) => {
     try {
         const products = await db.any('SELECT id, slug, updated_at FROM products WHERE is_archived = false');
-        const baseUrl = 'https://www.protodesignstudio.com';
+        
+        // Use your verified .in domain
+        const baseUrl = 'https://protodesignstudio.in';
 
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -32,17 +34,29 @@ router.get('/sitemap.xml', async (req, res) => {
             <url>
                 <loc>${baseUrl}/shop</loc>
                 <changefreq>daily</changefreq>
-                <priority>0.8</priority>
-            </url>`;
+                <priority>0.9</priority>
+            </url>
+            <url>
+                <loc>${baseUrl}/custom</loc>
+                <changefreq>weekly</changefreq>
+                <priority>0.9</priority>
+            </url>
 
+            <url><loc>${baseUrl}/printers</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+            <url><loc>${baseUrl}/printables</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+            <url><loc>${baseUrl}/filaments</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+            <url><loc>${baseUrl}/resins</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+            <url><loc>${baseUrl}/accessories</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+            <url><loc>${baseUrl}/spare-parts</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`;
+
+        // Dynamic Product Pages
         products.forEach(product => {
             const date = product.updated_at ? new Date(product.updated_at).toISOString() : new Date().toISOString();
             const productIdentifier = product.slug || product.id;
 
             xml += `
             <url>
-                // ✅ FIX: Added escapeXml() to the URL location
-                <loc>${escapeXml(baseUrl)}/product/${escapeXml(productIdentifier)}</loc>
+                <loc>${baseUrl}/product/${escapeXml(productIdentifier)}</loc>
                 <lastmod>${date}</lastmod>
                 <changefreq>weekly</changefreq>
                 <priority>0.7</priority>
