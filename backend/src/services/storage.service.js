@@ -63,12 +63,17 @@ export const storageService = {
     },
 
     /**
-     * 2. Upload from URL (Fixed for Bulk Import)
-     * Fetches the image first to optimize it locally before storage
+     * 2. Upload from URL (Fixed for Bulk Import & SEO)
+     * Fetches the image first to optimize it locally before storage.
+     * Accepts a fileName for SEO-friendly public_ids.
      */
-    async uploadFromUrl(url, folder = 'misc') {
+    async uploadFromUrl(url, folder = 'misc', fileName = 'product') {
         try {
-            // Fetch the image data ourselves to ensure we can optimize it
+            // Clean the product name for the filename (SEO best practice)
+            const sanitizedName = fileName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            const publicId = `${sanitizedName}_${Date.now()}`;
+
+            // Fetch the image data ourselves to ensure we can optimize it locally
             const response = await axios.get(url, { responseType: 'arraybuffer' });
             const optimizedBuffer = await this.optimizeImage(Buffer.from(response.data));
 
@@ -77,7 +82,8 @@ export const storageService = {
                     {
                         folder: `protodesign/${folder}`,
                         resource_type: 'image',
-                        format: 'webp'
+                        format: 'webp',
+                        public_id: publicId // ✅ Fixed: Set descriptive filename for Google Images
                     },
                     (error, result) => {
                         if (error) return reject(error);
