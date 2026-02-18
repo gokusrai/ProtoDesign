@@ -1,8 +1,8 @@
 import express from 'express';
 import multer from 'multer';
-import db from '../config/database.js'; //
-import { storageService } from '../services/storage.service.js'; //
-import authMiddleware from '../middleware/auth.js'; //
+import db from '../config/database.js';
+import { storageService } from '../services/storage.service.js';
+import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -11,14 +11,13 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ Helper function to generate unique SEO slugs
+// ✅ SEO HELPER: Generate clean, unique slugs
 const generateUniqueSlug = (name) => {
     const baseSlug = name
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-') // Replace non-alphanumeric with hyphens
-        .replace(/(^-|-$)/g, '');    // Trim leading/trailing hyphens
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
     
-    // Append a short random suffix to guarantee uniqueness and avoid SQL constraint errors
     const suffix = Math.random().toString(36).substring(2, 6);
     return `${baseSlug}-${suffix}`;
 };
@@ -27,16 +26,12 @@ const generateUniqueSlug = (name) => {
 const isAdmin = async (req, res, next) => {
     try {
         let role = null;
-        try {
-            const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
-            if (user && user.role) role = user.role;
-        } catch (e) {}
+        const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
+        if (user && user.role) role = user.role;
 
         if (role !== 'admin') {
-            try {
-                const roleObj = await db.oneOrNone('SELECT role FROM user_roles WHERE user_id = $1', [req.userId]);
-                if (roleObj && roleObj.role) role = roleObj.role;
-            } catch (e) {}
+            const roleObj = await db.oneOrNone('SELECT role FROM user_roles WHERE user_id = $1', [req.userId]);
+            if (roleObj && roleObj.role) role = roleObj.role;
         }
 
         if (role === 'admin') {
@@ -83,7 +78,6 @@ const parseCSV = (buffer) => {
     });
 };
 
-// Helper function to parse specifications string
 const parseSpecs = (str) => {
     if (!str) return {};
     const specs = {};
@@ -101,7 +95,6 @@ const parseSpecs = (str) => {
     return specs;
 };
 
-// Helper to format Google Drive URLs
 const formatImageUrl = (url) => {
     if (!url) return null;
     if (url.includes('drive.google.com')) {
@@ -113,9 +106,10 @@ const formatImageUrl = (url) => {
     return url;
 };
 
-// ✅ BULK UPLOAD ROUTE (Updated for unique slugs)
+// ==========================================
+// ✅ SYNCED BULK UPLOAD ROUTE
+// ==========================================
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
-    console.log("📂 Received Bulk Upload");
     try {
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
@@ -126,21 +120,11 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
             const rawPrice = p.price ? p.price.toString().replace(/[^0-9.]/g, '') : "";
             const rawStock = p.stock ? p.stock.toString().replace(/[^0-9]/g, '') : "0";
 
-            if (!p.name || !rawPrice) {
-                if (Object.values(p).join('').length > 0) {
-                    results.failed++;
-                    results.errors.push(`Skipped row: ${p.name || 'Unknown'} (Missing Price)`);
-                }
-                continue;
-            }
+            if (!p.name || !rawPrice) continue;
 
             try {
                 const specs = parseSpecs(p.specifications || "");
-                let desc = p.description || "";
-                desc = desc.replace(/\\n/g, '\n');
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
-                
-                // Generate a unique slug for the new product
                 const slug = generateUniqueSlug(p.name);
 
                 const product = await db.one(
@@ -148,42 +132,31 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                         name, slug, price, stock, category, sub_category,
                         short_description, description, specifications
                     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-                    [
-                        p.name, slug, parseFloat(rawPrice), parseInt(rawStock),
-                        cat, p.sub_category || '', p.short_description || '', desc, specs
-                    ]
+                    [p.name, slug, parseFloat(rawPrice), parseInt(rawStock), cat, p.sub_category || '', p.short_description || '', p.description || '', specs]
                 );
 
                 if (p.images) {
-                    let rawImages = p.images.replace(/\\n/g, '\n');
-                    const urls = rawImages.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(u => u.length > 0);
-
+                    const urls = p.images.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(Boolean);
                     for (let i = 0; i < urls.length; i++) {
                         const directUrl = formatImageUrl(urls[i]);
                         try {
-                            const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products');
-                            await db.none(
-                                'INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)',
-                                [product.id, cloudUrl, i]
-                            );
-                            if (i === 0) {
-                                await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
-                            }
+                            // ✅ Passing p.name to fix image SEO naming
+                            const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products', p.name);
+                            await db.none('INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)', [product.id, cloudUrl, i]);
+                            if (i === 0) await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
                         } catch (imgErr) {
-                            console.error(`   ⚠️ Failed image: ${directUrl}`, imgErr.message);
+                            console.error(`Failed image for ${p.name}:`, imgErr.message);
                         }
                     }
                 }
                 results.success++;
             } catch (err) {
-                console.error(`Row Error (${p.name}):`, err.message);
                 results.failed++;
                 results.errors.push(`Failed ${p.name}: ${err.message}`);
             }
         }
         res.json({ message: 'Bulk processing complete', results });
     } catch (error) {
-        console.error("Bulk Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -200,33 +173,19 @@ router.get('/', async (req, res) => {
         let paramCount = 1;
 
         if (show_archived !== 'true') query += ` AND (is_archived = false OR is_archived IS NULL)`;
-
         if (category && category !== 'all') {
             query += ` AND category = $${paramCount}`;
             params.push(category);
             paramCount++;
         }
-
-        if (sub_category && sub_category !== 'all') {
-            query += ` AND (description ILIKE $${paramCount} OR name ILIKE $${paramCount} OR sub_category ILIKE $${paramCount})`;
-            params.push(`%${sub_category}%`);
-            paramCount++;
-        }
-
         if (search) {
             query += ` AND (name ILIKE $${paramCount} OR description ILIKE $${paramCount})`;
             params.push(`%${search}%`);
             paramCount++;
         }
-
         query += ' ORDER BY created_at DESC';
 
         const products = await db.any(query, params);
-
-        for (let product of products) {
-            const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
-            product.product_images = images;
-        }
         res.json(products);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -235,12 +194,8 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        // ✅ Check if parameter matches either ID OR SLUG for SEO compatibility
-        const product = await db.oneOrNone(
-            'SELECT * FROM products WHERE id = $1 OR slug = $1', 
-            [req.params.id]
-        );
-
+        // Support both ID and Slug lookup
+        const product = await db.oneOrNone('SELECT * FROM products WHERE id = $1 OR slug = $1', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
@@ -248,10 +203,8 @@ router.get('/:id', async (req, res) => {
 
         const reviews = await db.any(`
             SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user
-            FROM reviews r
-                LEFT JOIN users u ON r.user_id = u.id
-            WHERE r.product_id = $1
-            ORDER BY r.created_at DESC
+            FROM reviews r LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.product_id = $1 ORDER BY r.created_at DESC
         `, [product.id]);
         product.reviews = reviews;
 
@@ -261,77 +214,25 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-router.get('/:id/reviews', async (req, res) => {
-    try {
-        const reviews = await db.any(`
-            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user, u.avatar_url
-            FROM reviews r
-                LEFT JOIN users u ON r.user_id = u.id
-            WHERE r.product_id = $1
-            ORDER BY r.created_at DESC
-        `, [req.params.id]);
-        res.json(reviews);
-    } catch (error) { res.status(500).json({ error: error.message }); }
-});
+// ==========================================
+// ADMIN ACTIONS
+// ==========================================
 
-router.post('/:id/reviews', authMiddleware, async (req, res) => {
-    try {
-        const { rating, comment } = req.body;
-        const review = await db.one(
-            'INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING *',
-            [req.params.id, req.userId, rating, comment]
-        );
-        await db.none(`
-            UPDATE products SET
-                average_rating = (SELECT AVG(rating) FROM reviews WHERE product_id = $1),
-                review_count = (SELECT COUNT(*) FROM reviews WHERE product_id = $1)
-            WHERE id = $1
-        `, [req.params.id]);
-        res.json(review);
-    } catch (error) { res.status(500).json({ error: error.message }); }
-});
-
-router.post('/:id/like', authMiddleware, async (req, res) => {
-    try {
-        const existing = await db.oneOrNone('SELECT * FROM product_likes WHERE product_id = $1 AND user_id = $2', [req.params.id, req.userId]);
-        if (existing) {
-            await db.none('DELETE FROM product_likes WHERE product_id = $1 AND user_id = $2', [req.params.id, req.userId]);
-            await db.none('UPDATE products SET likes_count = likes_count - 1 WHERE id = $1', [req.params.id]);
-            res.json({ liked: false });
-        } else {
-            await db.none('INSERT INTO product_likes (product_id, user_id) VALUES ($1, $2)', [req.params.id, req.userId]);
-            await db.none('UPDATE products SET likes_count = likes_count + 1 WHERE id = $1', [req.params.id]);
-            res.json({ liked: true });
-        }
-    } catch (error) { res.status(500).json({ error: error.message }); }
-});
-
-// ADMIN ROUTES
-// ✅ Updated Admin Create route to handle unique slugs
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
-        let videoUrl = null;
-
-        if (req.files && req.files['video']) {
-            videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
-        }
-
         const slug = generateUniqueSlug(name);
 
         const product = await db.one(
-            `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, video_url, is_archived)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-            [name, slug, description, short_description, price, category, stock, specifications, videoUrl, is_archived === 'true']
+            `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, is_archived)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+            [name, slug, description, short_description, price, category, stock, specifications, is_archived === 'true']
         );
 
         if (req.files && req.files['images']) {
             for (let i = 0; i < req.files['images'].length; i++) {
                 const url = await storageService.uploadFile(req.files['images'][i], 'products');
-                await db.none(
-                    'INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)',
-                    [product.id, url, i]
-                );
+                await db.none('INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)', [product.id, url, i]);
                 if (i === 0) await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [url, product.id]);
             }
         }
@@ -339,13 +240,16 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// ✅ Updated Admin Update route to refresh slug if name changes
 router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
-        
-        // Generate a new unique slug if the product is renamed
-        const slug = generateUniqueSlug(name);
+
+        // ✅ URL STABILITY: Only regenerate slug if the name actually changes
+        const existing = await db.one('SELECT name, slug FROM products WHERE id = $1', [req.params.id]);
+        let slug = existing.slug;
+        if (!slug || name !== existing.name) {
+            slug = generateUniqueSlug(name);
+        }
 
         await db.none(
             `UPDATE products
@@ -354,14 +258,8 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             [name, slug, description, short_description, price, category, stock, specifications, is_archived === 'true', req.params.id]
         );
 
-        if (req.files && req.files['video']) {
-            const videoUrl = await storageService.uploadFile(req.files['video'][0], 'products/videos');
-            await db.none('UPDATE products SET video_url = $1 WHERE id = $2', [videoUrl, req.params.id]);
-        }
-
         if (imagesToDelete) {
-            let idsToDelete = [];
-            try { idsToDelete = JSON.parse(imagesToDelete); } catch (e) { idsToDelete = [imagesToDelete]; }
+            const idsToDelete = JSON.parse(imagesToDelete);
             if (idsToDelete.length > 0) await db.none('DELETE FROM product_images WHERE id IN ($1:csv)', [idsToDelete]);
         }
 
@@ -386,7 +284,6 @@ router.delete('/:id', authMiddleware, isAdmin, async (req, res) => {
         if (req.query.permanent === 'true') {
             await db.none('DELETE FROM product_images WHERE product_id = $1', [req.params.id]);
             await db.none('DELETE FROM reviews WHERE product_id = $1', [req.params.id]);
-            await db.none('DELETE FROM product_likes WHERE product_id = $1', [req.params.id]);
             await db.none('DELETE FROM products WHERE id = $1', [req.params.id]);
             res.json({ message: 'Deleted permanently' });
         } else {
