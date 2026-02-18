@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
-import { Banknote, CreditCard } from 'lucide-react';
+import { Wallet, Banknote, CreditCard, ShieldCheck } from 'lucide-react';
 import { formatINR } from '@/lib/currency';
 
 interface PaymentGateway {
@@ -16,7 +16,7 @@ interface PaymentGatewaySelectorProps {
     amount: number;
     onSelect: (gatewayId: string) => void;
     selected?: string;
-    showCOD?: boolean; // New logic control
+    showCOD?: boolean; // Prop to hide COD for printers
 }
 
 export const PaymentGatewaySelector = ({
@@ -28,7 +28,9 @@ export const PaymentGatewaySelector = ({
     const [selectedGateway, setSelectedGateway] = useState(selected || 'phonepe');
 
     useEffect(() => {
-        if (!selected) onSelect('phonepe');
+        if (!selected) {
+            onSelect('phonepe');
+        }
     }, []);
 
     const handleSelect = (gatewayId: string) => {
@@ -36,58 +38,67 @@ export const PaymentGatewaySelector = ({
         onSelect(gatewayId);
     };
 
-    const gateways: PaymentGateway[] = [
+    const PAYMENT_GATEWAYS: PaymentGateway[] = [
         {
             id: 'phonepe',
-            name: 'Online Payment',
-            description: 'UPI, Cards, Net Banking (Save on shipping)',
+            name: 'PhonePe (Online)',
+            description: 'UPI, Cards, Net Banking',
             icon: <CreditCard className="w-6 h-6 text-purple-600" />,
-        },
+        }
     ];
 
+    // Only add COD if permitted
     if (showCOD) {
-        gateways.push({
+        PAYMENT_GATEWAYS.push({
             id: 'cod',
             name: 'Cash on Delivery',
-            description: 'Pay when your order arrives (+₹101 COD fee)',
+            description: 'Pay when your order arrives',
             icon: <Banknote className="w-6 h-6 text-green-600" />,
         });
     }
 
     return (
         <div className="space-y-6">
-            <div className="text-center">
-                <h3 className="text-2xl font-bold">Select Payment Method</h3>
-                <p className="text-muted-foreground mt-2">
-                    Order Total:{' '}
-                    <span className="text-2xl font-bold text-primary">
-                        {formatINR(amount)}
-                    </span>
+            <div className="text-center bg-slate-50 p-4 rounded-xl border border-dashed border-slate-200">
+                <h3 className="text-xl font-bold flex items-center justify-center gap-2">
+                    <ShieldCheck className="text-primary w-5 h-5" /> Select Payment Method
+                </h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                    Final Amount: <span className="font-bold text-primary">{formatINR(amount)}</span>
                 </p>
             </div>
 
             <RadioGroup value={selectedGateway} onValueChange={handleSelect}>
                 <div className="grid gap-4">
-                    {gateways.map((gateway) => (
+                    {PAYMENT_GATEWAYS.map((gateway) => (
                         <Card
                             key={gateway.id}
-                            className={`p-4 cursor-pointer transition-all ${
+                            className={`p-5 cursor-pointer transition-all border-2 ${
                                 selectedGateway === gateway.id
-                                    ? 'border-primary border-2 bg-primary/5'
-                                    : 'border-border hover:bg-slate-50'
+                                    ? 'border-primary bg-primary/[0.02] shadow-sm'
+                                    : 'border-slate-100 hover:border-slate-200 hover:bg-slate-50'
                             }`}
                             onClick={() => handleSelect(gateway.id)}
                         >
                             <div className="flex items-start gap-4">
-                                <RadioGroupItem value={gateway.id} id={gateway.id} className="mt-1" />
+                                <RadioGroupItem
+                                    value={gateway.id}
+                                    id={gateway.id}
+                                    className="mt-1"
+                                />
                                 <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
-                                        <div className="text-primary">{gateway.icon}</div>
-                                        <Label htmlFor={gateway.id} className="text-lg font-semibold cursor-pointer">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <div className="p-2 bg-white rounded-lg shadow-sm">{gateway.icon}</div>
+                                        <Label
+                                            htmlFor={gateway.id}
+                                            className="text-lg font-bold cursor-pointer"
+                                        >
                                             {gateway.name}
                                         </Label>
                                     </div>
-                                    <p className="text-sm text-muted-foreground">{gateway.description}</p>
+                                    <p className="text-sm text-muted-foreground pl-12">
+                                        {gateway.description}
+                                    </p>
                                 </div>
                             </div>
                         </Card>
