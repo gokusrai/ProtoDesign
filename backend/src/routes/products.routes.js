@@ -11,7 +11,6 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ SEO HELPER: Generate clean, unique slugs
 const generateUniqueSlug = (name) => {
     const baseSlug = name
         .toLowerCase()
