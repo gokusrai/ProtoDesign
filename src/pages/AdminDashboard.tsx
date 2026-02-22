@@ -19,7 +19,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch'; // ✅ Import Switch
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import {
     Loader2,
@@ -41,12 +41,12 @@ import {
     Layers,
     Maximize,
     ChevronLeft,
-    Archive, // ✅ Import Archive Icon
-    RefreshCw // ✅ Import Restore Icon
+    Archive,
+    RefreshCw
 } from 'lucide-react';
 import { formatINR } from '@/lib/currency';
 import { apiService } from '@/services/api.service';
-import {useDropzone} from "react-dropzone";
+import { useDropzone } from "react-dropzone";
 
 // --- CONFIGURATION ---
 const MAIN_CATEGORIES = [
@@ -82,7 +82,7 @@ interface Product {
     sub_category?: string;
     video_url?: string | null;
     product_images?: Array<{ id: string; image_url?: string; image_data?: string; display_order: number; }>;
-    is_archived?: boolean; // ✅ Added field
+    is_archived?: boolean;
 }
 
 interface Quote {
@@ -180,7 +180,7 @@ export default function AdminDashboard() {
 
     // -- UI State --
     const [showAddProduct, setShowAddProduct] = useState(false);
-    const [showArchived, setShowArchived] = useState(false); // ✅ Toggle state for archives
+    const [showArchived, setShowArchived] = useState(false);
 
     // -- Pagination State --
     const [ordersPage, setOrdersPage] = useState(1);
@@ -226,7 +226,7 @@ export default function AdminDashboard() {
     // Re-fetch when Archive toggle changes
     useEffect(() => {
         if (isAdmin) fetchDashboardData();
-    }, [showArchived]);
+    }, [showArchived, isAdmin]);
 
     // Cleanup blobs
     useEffect(() => { return () => newProductImagePreviews.forEach(url => URL.revokeObjectURL(url)); }, []);
@@ -255,19 +255,37 @@ export default function AdminDashboard() {
         setFilterSubCategory('all');
     }, [filterCategory]);
 
+    // ✅ FIXED ADMIN VERIFICATION
     const checkAdminAccess = async () => {
         try {
             const token = localStorage.getItem('auth_token');
-            if (!token) { navigate('/auth'); return; }
+            if (!token) {
+                navigate('/auth');
+                return;
+            }
+
             const res = await apiService.getCurrentUser();
-            if ((res.role || res.user?.role) !== 'admin') {
-                toast.error('Access denied.');
+
+            // Check if the API returned an error object instead of blowing up silently
+            if (res.error) {
+                throw new Error(res.error);
+            }
+
+            // Safely extract the role
+            const userRole = res.role || res.user?.role;
+
+            if (userRole !== 'admin') {
+                console.error("Access check failed. Received role:", userRole);
+                toast.error('Access denied. Admin privileges required.');
                 navigate('/');
                 return;
             }
+
             setIsAdmin(true);
             await fetchDashboardData();
-        } catch (e) {
+        } catch (e: any) {
+            console.error("Admin verification error:", e);
+            toast.error('Failed to verify admin status: ' + (e.message || 'Unknown error'));
             navigate('/auth');
         } finally {
             setIsLoading(false);
@@ -276,8 +294,6 @@ export default function AdminDashboard() {
 
     const fetchDashboardData = async () => {
         try {
-            // ✅ Fetch with archive flag if toggle is on
-            // Note: We use request() directly to append the query param if getProducts doesn't support it yet
             const productsRes = await apiService.request(
                 showArchived ? '/products?show_archived=true' : '/products'
             );
@@ -471,7 +487,6 @@ export default function AdminDashboard() {
         );
     };
 
-    // ✅ Renamed to handleArchiveProduct
     const handleArchiveProduct = async (id: string) => {
         const isRestoring = showArchived;
         const confirmMsg = isRestoring
@@ -594,7 +609,6 @@ export default function AdminDashboard() {
         </div>
     );
 
-    // ... (QuoteSpecsModal remains unchanged) ...
     const QuoteSpecsModal = ({ quote, onClose }: { quote: any, onClose: () => void }) => {
         if (!quote) return null;
         let specs = quote.specifications || {};
@@ -695,7 +709,6 @@ export default function AdminDashboard() {
 
                     <CardContent className="pt-6">
                         {showAddProduct && (
-                            // ... (Keep existing Add Product form logic same) ...
                             <div className="mb-8 p-6 border rounded-xl bg-secondary/10">
                                 <h3 className="font-bold mb-4 text-lg">Add New Product</h3>
                                 <form onSubmit={handleAddProduct} className="space-y-4">
@@ -740,7 +753,6 @@ export default function AdminDashboard() {
                             {displayedProducts.map(product => (
                                 <div key={product.id} className="p-4 border rounded-lg hover:bg-muted/5 transition-colors">
                                     {editingProductId === product.id ? (
-                                        // ... (Keep existing Edit Form) ...
                                         <div className="space-y-4">
                                             <div className="grid md:grid-cols-2 gap-4">
                                                 <div><Label>Name</Label><Input value={editingProductData.name} onChange={e => setEditingProductData({...editingProductData, name: e.target.value})} /></div>
@@ -824,7 +836,7 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* ORDERS SECTION ... (Rest of file remains unchanged) ... */}
+                {/* ORDERS SECTION */}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <div><CardTitle>Recent Orders</CardTitle><CardDescription>View and manage orders</CardDescription></div>
@@ -907,7 +919,7 @@ export default function AdminDashboard() {
                     </CardContent>
                 </Card>
 
-                {/* QUOTE MANAGEMENT ... (Rest of file remains unchanged) ... */}
+                {/* QUOTE MANAGEMENT */}
                 <Card className="mt-8">
                     <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
                         <div><CardTitle>Custom Print Requests</CardTitle><CardDescription>Manage incoming quotes</CardDescription></div>
