@@ -11,7 +11,7 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-// ✅ 160 IQ SEO: Clean Semantic Slugs (No random hashes unless necessary)
+// ✅ 160 IQ SEO: Clean Semantic Slugs
 const generateUniqueSlug = async (name, ignoreId = null) => {
     let slug = name.toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
@@ -210,8 +210,17 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        // ✅ THE FIX: Added "id::text = $1" so PostgreSQL doesn't crash on UUID mismatch for SEO links
-        const product = await db.oneOrNone('SELECT * FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        const param = req.params.id;
+        
+        // ✅ 160 IQ ROUTING: Determine if param is UUID or Slug to prevent DB casting crashes
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const isUUID = uuidRegex.test(param);
+
+        const query = isUUID 
+            ? 'SELECT * FROM products WHERE id = $1' 
+            : 'SELECT * FROM products WHERE slug = $1';
+
+        const product = await db.oneOrNone(query, [param]);
         
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
