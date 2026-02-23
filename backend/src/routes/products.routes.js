@@ -11,17 +11,34 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 },
 });
 
-const generateUniqueSlug = (name) => {
-    const baseSlug = name
-        .toLowerCase()
+// ✅ 160 IQ SEO: Clean Semantic Slugs (No random hashes unless necessary)
+const generateUniqueSlug = async (name, ignoreId = null) => {
+    let slug = name.toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '');
+
+    const checkQuery = ignoreId 
+        ? 'SELECT id FROM products WHERE slug = $1 AND id != $2'
+        : 'SELECT id FROM products WHERE slug = $1';
     
-    const suffix = Math.random().toString(36).substring(2, 6);
-    return `${baseSlug}-${suffix}`;
+    const params = ignoreId ? [slug, ignoreId] : [slug];
+    
+    let exists = await db.oneOrNone(checkQuery, params);
+    
+    if (exists) {
+        let counter = 1;
+        let newSlug = `${slug}-${counter}`;
+        while (await db.oneOrNone('SELECT id FROM products WHERE slug = $1', [newSlug])) {
+            counter++;
+            newSlug = `${slug}-${counter}`;
+        }
+        return newSlug;
+    }
+    
+    return slug;
 };
 
-// ✅ Robust Admin Middleware
+// Robust Admin Middleware
 const isAdmin = async (req, res, next) => {
     try {
         let role = null;
@@ -106,7 +123,7 @@ const formatImageUrl = (url) => {
 };
 
 // ==========================================
-// ✅ SYNCED BULK UPLOAD ROUTE
+// SYNCED BULK UPLOAD ROUTE
 // ==========================================
 router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req, res) => {
     try {
@@ -124,7 +141,9 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
             try {
                 const specs = parseSpecs(p.specifications || "");
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
-                const slug = generateUniqueSlug(p.name);
+                
+                // ✅ Use new async slug generator
+                const slug = await generateUniqueSlug(p.name);
 
                 const product = await db.one(
                     `INSERT INTO products (
@@ -139,7 +158,6 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                     for (let i = 0; i < urls.length; i++) {
                         const directUrl = formatImageUrl(urls[i]);
                         try {
-                            // ✅ Passing p.name to fix image SEO naming
                             const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products', p.name);
                             await db.none('INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)', [product.id, cloudUrl, i]);
                             if (i === 0) await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
@@ -193,7 +211,6 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        // Support both ID and Slug lookup
         const product = await db.oneOrNone('SELECT * FROM products WHERE id = $1 OR slug = $1', [req.params.id]);
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
@@ -220,7 +237,9 @@ router.get('/:id', async (req, res) => {
 router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCount: 10 }, { name: 'video', maxCount: 1 }]), async (req, res) => {
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
-        const slug = generateUniqueSlug(name);
+        
+        // ✅ Await async slug generation
+        const slug = await generateUniqueSlug(name);
 
         const product = await db.one(
             `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, is_archived)
@@ -243,11 +262,12 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
 
-        // ✅ URL STABILITY: Only regenerate slug if the name actually changes
         const existing = await db.one('SELECT name, slug FROM products WHERE id = $1', [req.params.id]);
         let slug = existing.slug;
+        
+        // ✅ URL STABILITY: Only regenerate slug if the name actually changes
         if (!slug || name !== existing.name) {
-            slug = generateUniqueSlug(name);
+            slug = await generateUniqueSlug(name, req.params.id);
         }
 
         await db.none(
