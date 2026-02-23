@@ -130,9 +130,11 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
         const products = parseCSV(req.file.buffer);
-        const results = { success: 0, failed: 0, errors: [] };
-
-        for (const p of products) {
+      const slug = await generateUniqueSlug(p.name);
+router.get('/:id', async (req, res) => 
+    {  
+        for (const p of products) 
+        {
             const rawPrice = p.price ? p.price.toString().replace(/[^0-9.]/g, '') : "";
             const rawStock = p.stock ? p.stock.toString().replace(/[^0-9]/g, '') : "0";
 
