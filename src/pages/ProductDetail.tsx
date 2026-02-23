@@ -51,7 +51,7 @@ interface ProductImage {
 
 interface Product {
     id: string;
-    slug?: string; // ✅ Added slug to interface
+    slug?: string;
     name: string;
     description: string;
     short_description?: string;
@@ -238,7 +238,6 @@ const ProductDetail = () => {
 
                 await checkAdmin();
 
-                // Backend now handles id OR slug automatically via the updated route
                 const productRes = await apiService.getProduct(productId);
                 const fetchedProduct = productRes.data || productRes;
                 setProduct(fetchedProduct);
@@ -561,7 +560,8 @@ const ProductDetail = () => {
 
     // --- SEO & SCHEMA GENERATION ---
     const siteUrl = window.location.origin;
-    // ✅ SEO FIX: Priority to Slug in URLs
+    
+    // SEO FIX: Priority to Slug in URLs
     const currentUrl = product?.slug 
         ? `${siteUrl}/product/${product.slug}` 
         : `${siteUrl}/product/${productId}`;
@@ -569,14 +569,24 @@ const ProductDetail = () => {
     const productImage = activeImage || product?.image_url || '/placeholder.svg';
     const fullImageUrl = productImage.startsWith('http') ? productImage : `${siteUrl}${productImage}`;
 
-    // ✅ SEO FIX: Enhanced Schema with reviews and high-intent metadata
+    const allImages = getProductImages();
+    const schemaImages = allImages.length > 0 
+        ? allImages.map(img => img.startsWith('http') ? img : `${siteUrl}${img}`) 
+        : [fullImageUrl];
+
+    // SEO FIX: 1 Year Validity to clear Search Console Warnings
+    const priceValidUntil = new Date();
+    priceValidUntil.setFullYear(priceValidUntil.getFullYear() + 1);
+
+    // SEO FIX: Deep E-Commerce Schema Injection
     const productSchema = product ? {
         "@context": "https://schema.org/",
         "@type": "Product",
         "name": product.name,
-        "image": [fullImageUrl],
+        "image": schemaImages,
         "description": product.short_description || product.description.substring(0, 160),
         "sku": product.id,
+        "mpn": product.id,
         "brand": {
             "@type": "Brand",
             "name": "ProtoDesign"
@@ -586,8 +596,28 @@ const ProductDetail = () => {
             "url": currentUrl,
             "priceCurrency": "INR",
             "price": product.price,
+            "priceValidUntil": priceValidUntil.toISOString().split('T')[0],
+            "itemCondition": "https://schema.org/NewCondition",
             "availability": product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-            "itemCondition": "https://schema.org/NewCondition"
+            "shippingDetails": {
+                "@type": "OfferShippingDetails",
+                "shippingRate": {
+                    "@type": "MonetaryAmount",
+                    "value": product.category === '3d_printer' ? 0 : 199,
+                    "currency": "INR"
+                },
+                "shippingDestination": {
+                    "@type": "DefinedRegion",
+                    "addressCountry": "IN"
+                }
+            },
+            "hasMerchantReturnPolicy": {
+                "@type": "MerchantReturnPolicy",
+                "applicableCountry": "IN",
+                "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
+                "merchantReturnDays": 7,
+                "returnMethod": "https://schema.org/ReturnByMail"
+            }
         },
         ...(reviews.length > 0 && {
             "aggregateRating": {
@@ -599,6 +629,7 @@ const ProductDetail = () => {
                 "@type": "Review",
                 "reviewRating": { "@type": "Rating", "ratingValue": r.rating },
                 "author": { "@type": "Person", "name": r.user },
+                "datePublished": r.created_at ? new Date(r.created_at).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                 "reviewBody": r.comment
             }))
         })
@@ -607,7 +638,6 @@ const ProductDetail = () => {
     if (loading) return <div className="min-h-screen pt-32 flex justify-center"><Loader2 className="animate-spin text-primary w-8 h-8" /></div>;
     if (!product) return null;
 
-    const productImages = getProductImages();
     const inStock = isEditing ? (editState?.stock ?? 0) > 0 : product.stock > 0;
     const averageRating = product.average_rating ? Number(product.average_rating) : 0;
     const displaySpecs = normalizeSpecs(product.specifications);
@@ -616,7 +646,6 @@ const ProductDetail = () => {
         <>
             {product && (
                 <Helmet>
-                    {/* ✅ SEO FIX: Dynamic Title & Meta with "Buy" intent */}
                     <title>{`${product.name} - Buy Online | ProtoDesign`}</title>
                     <meta name="description" content={`Buy ${product.name} at ProtoDesign. ${product.short_description || product.description.substring(0, 120)}`} />
                     <link rel="canonical" href={currentUrl} />
@@ -679,7 +708,7 @@ const ProductDetail = () => {
                             {activeImage && isVideo(activeImage) ? (
                                 <video src={activeImage} controls autoPlay muted loop className="w-full h-full object-contain" />
                             ) : (
-                                <ImageMagnifier src={activeImage || productImages[0]} alt={product.name} />
+                                <ImageMagnifier src={activeImage || allImages[0]} alt={product.name} />
                             )}
                         </div>
 
@@ -742,7 +771,7 @@ const ProductDetail = () => {
                                     <DetailImageDropzone />
                                 </>
                             ) : (
-                                productImages.map((img, idx) => (
+                                allImages.map((img, idx) => (
                                     <button
                                         key={idx}
                                         onClick={() => setActiveImage(img)}
@@ -994,7 +1023,6 @@ const ProductDetail = () => {
                     </div>
 
                     <div className="h-fit">
-                        {/* ✅ SEO FIX: Wrapped in semantic article tag */}
                         <article className="prose prose-sm max-w-none text-muted-foreground leading-relaxed">
                             <h2 className="text-2xl font-bold font-display mb-6">About {product.name}</h2>
                             {isEditing && editState ? (
