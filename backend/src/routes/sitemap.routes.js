@@ -5,6 +5,7 @@ const router = express.Router();
 
 // Helper to escape XML special characters like &
 const escapeXml = (unsafe) => {
+    if (!unsafe) return '';
     return unsafe.replace(/[<>&'"]/g, (c) => {
         switch (c) {
             case '<': return '&lt;';
@@ -19,13 +20,15 @@ const escapeXml = (unsafe) => {
 
 router.get('/sitemap.xml', async (req, res) => {
     try {
-        const products = await db.any('SELECT id, slug, updated_at FROM products WHERE is_archived = false');
+        // ✅ 160 IQ SEO: Fetch name and image_url for Google Image Indexing
+        const products = await db.any('SELECT id, slug, name, image_url, updated_at FROM products WHERE is_archived = false');
         
-        // Use your verified .in domain
         const baseUrl = 'https://protodesignstudio.in';
 
+        // ✅ Inject the Google Image Sitemap XML namespace
         let xml = `<?xml version="1.0" encoding="UTF-8"?>
-        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+        <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+                xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
             <url>
                 <loc>${baseUrl}/</loc>
                 <changefreq>daily</changefreq>
@@ -41,7 +44,6 @@ router.get('/sitemap.xml', async (req, res) => {
                 <changefreq>weekly</changefreq>
                 <priority>0.9</priority>
             </url>
-
             <url><loc>${baseUrl}/printers</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
             <url><loc>${baseUrl}/printables</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
             <url><loc>${baseUrl}/filaments</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
@@ -49,17 +51,36 @@ router.get('/sitemap.xml', async (req, res) => {
             <url><loc>${baseUrl}/accessories</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
             <url><loc>${baseUrl}/spare-parts</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>`;
 
-        // Dynamic Product Pages
+        // Dynamic Product Pages with Image Data
         products.forEach(product => {
             const date = product.updated_at ? new Date(product.updated_at).toISOString() : new Date().toISOString();
             const productIdentifier = product.slug || product.id;
+            const productUrl = `${baseUrl}/product/${escapeXml(productIdentifier)}`;
+
+            // Ensure image URL is absolute
+            let imgUrl = product.image_url;
+            if (imgUrl && !imgUrl.startsWith('http')) {
+                imgUrl = `${baseUrl}${imgUrl}`;
+            }
 
             xml += `
             <url>
-                <loc>${baseUrl}/product/${escapeXml(productIdentifier)}</loc>
+                <loc>${productUrl}</loc>
                 <lastmod>${date}</lastmod>
                 <changefreq>weekly</changefreq>
-                <priority>0.7</priority>
+                <priority>0.7</priority>`;
+            
+            // ✅ Feed images to Google Images crawler
+            if (imgUrl) {
+                xml += `
+                <image:image>
+                    <image:loc>${escapeXml(imgUrl)}</image:loc>
+                    <image:title>${escapeXml(product.name)}</image:title>
+                    <image:caption>Buy ${escapeXml(product.name)} at ProtoDesign</image:caption>
+                </image:image>`;
+            }
+
+            xml += `
             </url>`;
         });
 
