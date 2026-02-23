@@ -53,9 +53,11 @@ const Checkout = () => {
         notes: '',
     });
 
-    // --- 160 IQ Shipping Logic ---
-    // Detect if the cart contains a printer
+    const subtotal = total;
     const hasPrinter = items.some(item => item.product.category === '3d_printer');
+    
+    // COD is ONLY allowed if there are NO printers AND the subtotal is strictly less than ₹999
+    const isEligibleForCOD = !hasPrinter && subtotal < 999;
 
     /**
      * Strategic Pricing Calculation:
@@ -67,10 +69,16 @@ const Checkout = () => {
         return selectedGateway === 'cod' ? 300 : 199;
     };
 
-    const subtotal = total;
     const shipping = getShippingCharge();
     const gst = subtotal * 0.18;
     const finalTotal = subtotal + gst + shipping;
+
+    // Failsafe: If they somehow had COD selected but their cart crosses 999, force it back to PhonePe
+    useEffect(() => {
+        if (!isEligibleForCOD && selectedGateway === 'cod') {
+            setSelectedGateway('phonepe');
+        }
+    }, [isEligibleForCOD, selectedGateway]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -165,7 +173,7 @@ const Checkout = () => {
                 finalTotal,
                 formData,
                 selectedGateway,
-                shipping // Dynamically passing the calculated shipping
+                shipping 
             );
 
             if (response && response.redirectUrl) {
@@ -267,7 +275,7 @@ const Checkout = () => {
                                 amount={finalTotal}
                                 onSelect={setSelectedGateway}
                                 selected={selectedGateway}
-                                showCOD={!hasPrinter} // Block COD if any printer exists in cart
+                                showCOD={isEligibleForCOD} // ✅ Dynamically blocked for items >= 999
                             />
                         </Card>
                     </div>
@@ -329,7 +337,10 @@ const Checkout = () => {
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg text-[11px] text-muted-foreground space-y-2">
                                 <p className="flex items-start gap-2">
                                     <span className="text-primary font-bold">•</span>
-                                    Orders containing 3D Printers are ineligible for Cash on Delivery.
+                                    {/* ✅ Dynamic informative text based on eligibility */}
+                                    {hasPrinter 
+                                        ? "Orders containing 3D Printers are ineligible for Cash on Delivery." 
+                                        : "Cash on Delivery is only available for orders below ₹999."}
                                 </p>
                                 <p className="flex items-start gap-2">
                                     <span className="text-primary font-bold">•</span>
