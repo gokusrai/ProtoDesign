@@ -145,35 +145,26 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                 // ✅ Use new async slug generator
                 const slug = await generateUniqueSlug(p.name);
 
-                const product = await db.one(
-                    `INSERT INTO products (
-                        name, slug, price, stock, category, sub_category,
-                        short_description, description, specifications
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-                    [p.name, slug, parseFloat(rawPrice), parseInt(rawStock), cat, p.sub_category || '', p.short_description || '', p.description || '', specs]
-                );
+            router.get('/:id', async (req, res) => {
+    try {
+        // ✅ THE FIX: Added "id::text = $1" so PostgreSQL doesn't crash on UUID mismatch
+        const product = await db.oneOrNone('SELECT * FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        
+        if (!product) return res.status(404).json({ error: 'Product not found' });
 
-                if (p.images) {
-                    const urls = p.images.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(Boolean);
-                    for (let i = 0; i < urls.length; i++) {
-                        const directUrl = formatImageUrl(urls[i]);
-                        try {
-                            const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products', p.name);
-                            await db.none('INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)', [product.id, cloudUrl, i]);
-                            if (i === 0) await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
-                        } catch (imgErr) {
-                            console.error(`Failed image for ${p.name}:`, imgErr.message);
-                        }
-                    }
-                }
-                results.success++;
-            } catch (err) {
-                results.failed++;
-                results.errors.push(`Failed ${p.name}: ${err.message}`);
-            }
-        }
-        res.json({ message: 'Bulk processing complete', results });
+        const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
+        product.product_images = images;
+
+        const reviews = await db.any(`
+            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user
+            FROM reviews r LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.product_id = $1 ORDER BY r.created_at DESC
+        `, [product.id]);
+        product.reviews = reviews;
+
+        res.json(product);
     } catch (error) {
+        console.error("Fetch Product Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
