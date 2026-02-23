@@ -130,11 +130,9 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
         if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded' });
 
         const products = parseCSV(req.file.buffer);
-      const slug = await generateUniqueSlug(p.name);
-router.get('/:id', async (req, res) => 
-    {  
-        for (const p of products) 
-        {
+        const results = { success: 0, failed: 0, errors: [] };
+
+        for (const p of products) {
             const rawPrice = p.price ? p.price.toString().replace(/[^0-9.]/g, '') : "";
             const rawStock = p.stock ? p.stock.toString().replace(/[^0-9]/g, '') : "0";
 
@@ -144,29 +142,37 @@ router.get('/:id', async (req, res) =>
                 const specs = parseSpecs(p.specifications || "");
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
                 
-                // ✅ Use new async slug generator
                 const slug = await generateUniqueSlug(p.name);
 
-            router.get('/:id', async (req, res) => {
-    try {
-        // ✅ THE FIX: Added "id::text = $1" so PostgreSQL doesn't crash on UUID mismatch
-        const product = await db.oneOrNone('SELECT * FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
-        
-        if (!product) return res.status(404).json({ error: 'Product not found' });
+                const product = await db.one(
+                    `INSERT INTO products (
+                        name, slug, price, stock, category, sub_category,
+                        short_description, description, specifications
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+                    [p.name, slug, parseFloat(rawPrice), parseInt(rawStock), cat, p.sub_category || '', p.short_description || '', p.description || '', specs]
+                );
 
-        const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
-        product.product_images = images;
-
-        const reviews = await db.any(`
-            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user
-            FROM reviews r LEFT JOIN users u ON r.user_id = u.id
-            WHERE r.product_id = $1 ORDER BY r.created_at DESC
-        `, [product.id]);
-        product.reviews = reviews;
-
-        res.json(product);
+                if (p.images) {
+                    const urls = p.images.split(/[\n\r\s,;]+/).map(u => u.trim()).filter(Boolean);
+                    for (let i = 0; i < urls.length; i++) {
+                        const directUrl = formatImageUrl(urls[i]);
+                        try {
+                            const cloudUrl = await storageService.uploadFromUrl(directUrl, 'products', p.name);
+                            await db.none('INSERT INTO product_images (product_id, image_url, display_order) VALUES ($1, $2, $3)', [product.id, cloudUrl, i]);
+                            if (i === 0) await db.none('UPDATE products SET image_url = $1 WHERE id = $2', [cloudUrl, product.id]);
+                        } catch (imgErr) {
+                            console.error(`Failed image for ${p.name}:`, imgErr.message);
+                        }
+                    }
+                }
+                results.success++;
+            } catch (err) {
+                results.failed++;
+                results.errors.push(`Failed ${p.name}: ${err.message}`);
+            }
+        }
+        res.json({ message: 'Bulk processing complete', results });
     } catch (error) {
-        console.error("Fetch Product Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -204,7 +210,9 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        const product = await db.oneOrNone('SELECT * FROM products WHERE id = $1 OR slug = $1', [req.params.id]);
+        // ✅ THE FIX: Added "id::text = $1" so PostgreSQL doesn't crash on UUID mismatch for SEO links
+        const product = await db.oneOrNone('SELECT * FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        
         if (!product) return res.status(404).json({ error: 'Product not found' });
 
         const images = await db.any('SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC', [product.id]);
@@ -219,6 +227,7 @@ router.get('/:id', async (req, res) => {
 
         res.json(product);
     } catch (error) {
+        console.error("Fetch Product Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -231,7 +240,6 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
         
-        // ✅ Await async slug generation
         const slug = await generateUniqueSlug(name);
 
         const product = await db.one(
@@ -258,7 +266,6 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
         const existing = await db.one('SELECT name, slug FROM products WHERE id = $1', [req.params.id]);
         let slug = existing.slug;
         
-        // ✅ URL STABILITY: Only regenerate slug if the name actually changes
         if (!slug || name !== existing.name) {
             slug = await generateUniqueSlug(name, req.params.id);
         }
