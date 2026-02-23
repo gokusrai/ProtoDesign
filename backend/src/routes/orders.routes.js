@@ -151,7 +151,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 
 /**
  * POST /api/orders
- * CREATION WITH DYNAMIC SHIPPING ENFORCEMENT
+ * CREATION WITH DYNAMIC SHIPPING & PRICING ENFORCEMENT
  */
 router.post('/', authMiddleware, async (req, res, next) => {
     try {
@@ -169,15 +169,9 @@ router.post('/', authMiddleware, async (req, res, next) => {
         const productMap = {};
         products.forEach(p => productMap[p.id] = p);
 
-        // 2. ENFORCE BUSINESS RULES (Recalculate shipping based on DB verified categories)
+        // 2. ENFORCE BUSINESS RULES (Recalculate logic based on DB verified values)
         const hasPrinter = products.some(p => p.category === '3d_printer');
         
-        // Safety Check: Block COD for printers
-        if (hasPrinter && paymentGateway === 'cod') {
-            return res.status(400).json({ error: 'Cash on Delivery is not available for orders containing 3D Printers' });
-        }
-
-        // Logic: Printer = FREE | Standard (Online) = 199 | Standard (COD) = 300
         let shippingAmount = 0.00;
         if (!hasPrinter) {
             shippingAmount = (paymentGateway === 'cod') ? 300.00 : 199.00;
@@ -196,6 +190,16 @@ router.post('/', authMiddleware, async (req, res, next) => {
             const lineTotal = parseFloat(product.price) * quantity;
             subtotal += lineTotal;
             verifiedItems.push({ ...item, price: product.price, quantity, lineTotal });
+        }
+
+        // ✅ SECURITY: Verify COD eligibility on the server side
+        if (paymentGateway === 'cod') {
+            if (hasPrinter) {
+                return res.status(400).json({ error: 'Cash on Delivery is not available for orders containing 3D Printers' });
+            }
+            if (subtotal >= 999) {
+                return res.status(400).json({ error: 'Cash on Delivery is only available for orders below ₹999' });
+            }
         }
 
         const gst = subtotal * 0.18;
