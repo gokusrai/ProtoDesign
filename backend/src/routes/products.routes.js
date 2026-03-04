@@ -38,22 +38,22 @@ const generateUniqueSlug = async (name, ignoreId = null) => {
     return slug;
 };
 
-// Robust Admin Middleware
+// ✅ FIXED: Robust Admin Middleware (Removed crashing user_roles check)
 const isAdmin = async (req, res, next) => {
     try {
-        let role = null;
-        const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
-        if (user && user.role) role = user.role;
-
-        if (role !== 'admin') {
-            const roleObj = await db.oneOrNone('SELECT role FROM user_roles WHERE user_id = $1', [req.userId]);
-            if (roleObj && roleObj.role) role = roleObj.role;
+        // 1. First check if the token payload already knows they are an admin
+        if (req.userRole === 'admin') {
+            return next();
         }
 
-        if (role === 'admin') {
-            next();
+        // 2. If not, do a single, safe lookup on the main users table
+        const user = await db.oneOrNone('SELECT role FROM users WHERE id = $1', [req.userId]);
+        
+        if (user && user.role === 'admin') {
+            return next();
         } else {
-            res.status(403).json({ error: 'Admin access required' });
+            // Stop crashing the server, just gracefully deny access
+            return res.status(403).json({ error: 'Admin access required' });
         }
     } catch (error) {
         console.error("Admin Verify Error:", error);
