@@ -158,6 +158,7 @@ interface ProductFormState {
     imageFiles: File[];
     videoFile: File | null;
     specs: SpecItem[];
+    allow_cod_override: boolean; // ✅ Added override state
 }
 
 interface EditingProductImageState {
@@ -209,13 +210,13 @@ export default function AdminDashboard() {
 
     // -- Form State (Add/Edit Product) --
     const [newProduct, setNewProduct] = useState<ProductFormState>({
-        name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category:'', imageFiles: [], videoFile: null, specs: []
+        name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category:'', imageFiles: [], videoFile: null, specs: [], allow_cod_override: false
     });
     const [newProductImagePreviews, setNewProductImagePreviews] = useState<string[]>([]);
 
     const [editingProductId, setEditingProductId] = useState<string | null>(null);
     const [editingProductData, setEditingProductData] = useState<ProductFormState>({
-        name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category: '', imageFiles: [], videoFile: null, specs:[]
+        name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category: '', imageFiles: [], videoFile: null, specs:[], allow_cod_override: false
     });
     const [editingProductImages, setEditingProductImages] = useState<EditingProductImageState[]>([]);
     const [editingVideoPreview, setEditingVideoPreview] = useState<string | null>(null);
@@ -364,6 +365,11 @@ export default function AdminDashboard() {
                 return acc;
             }, {} as Record<string, string>);
 
+            // ✅ Inject COD Override into specifications
+            if (newProduct.allow_cod_override) {
+                specsObject['allow_cod_override'] = 'true';
+            }
+
             const formData = new FormData();
             formData.append('name', newProduct.name);
             formData.append('description', newProduct.description);
@@ -380,7 +386,7 @@ export default function AdminDashboard() {
             toast.success('Product created');
             setShowAddProduct(false);
             setNewProductImagePreviews([]);
-            setNewProduct({ name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category:'', imageFiles: [], videoFile: null, specs: [] });
+            setNewProduct({ name: '', description: '', short_description: '', price: '', stock: '', category: '3d_printer', sub_category:'', imageFiles: [], videoFile: null, specs: [], allow_cod_override: false });
             fetchDashboardData();
         } catch (e: any) { toast.error(e.message || 'Failed to create'); }
     };
@@ -388,11 +394,25 @@ export default function AdminDashboard() {
     // --- EDIT PRODUCT HANDLERS ---
     const startEditProduct = (p: Product) => {
         setEditingProductId(p.id);
-        const specsArray = p.specifications ? Object.entries(p.specifications).map(([key, value]) => ({ key, value })) : [];
+        
+        let specsArray: SpecItem[] = [];
+        let hasOverride = false;
+        
+        // ✅ Safely parse existing specifications and extract override flag
+        if (p.specifications) {
+            if (Array.isArray(p.specifications)) {
+                hasOverride = p.specifications.some((s: any) => s.key === 'allow_cod_override' && String(s.value).toLowerCase() === 'true');
+                specsArray = p.specifications.filter((s: any) => s.key !== 'allow_cod_override').map((s: any) => ({ key: s.key, value: String(s.value) }));
+            } else {
+                hasOverride = String((p.specifications as any).allow_cod_override).toLowerCase() === 'true';
+                specsArray = Object.entries(p.specifications).filter(([k]) => k !== 'allow_cod_override').map(([key, value]) => ({ key, value: String(value) }));
+            }
+        }
+
         setEditingProductData({
             name: p.name, description: p.description || '', short_description: p.short_description || '',
             price: String(p.price), stock: String(p.stock), category: p.category, sub_category: p.sub_category || '',
-            imageFiles: [], videoFile: null, specs: specsArray
+            imageFiles: [], videoFile: null, specs: specsArray, allow_cod_override: hasOverride
         });
         setEditingVideoPreview(p.video_url || null);
         const imgs = (p.product_images || []).sort((a,b) => a.display_order - b.display_order)
@@ -435,6 +455,11 @@ export default function AdminDashboard() {
                 if (item.key.trim()) acc[item.key] = item.value;
                 return acc;
             }, {} as Record<string, string>);
+
+            // ✅ Inject COD Override into specifications
+            if (editingProductData.allow_cod_override) {
+                specsObject['allow_cod_override'] = 'true';
+            }
 
             const formData = new FormData();
             formData.append('name', editingProductData.name);
@@ -720,6 +745,14 @@ export default function AdminDashboard() {
                                             <div><Label>Category</Label><Select value={newProduct.category} onValueChange={val => setNewProduct({...newProduct, category: val, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                             <div><Label>Sub</Label><Select value={newProduct.sub_category} onValueChange={val => setNewProduct({...newProduct, sub_category: val})} disabled={!SUB_CATEGORIES[newProduct.category]}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent>{SUB_CATEGORIES[newProduct.category]?.map(sc => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}</SelectContent></Select></div>
                                         </div>
+                                        {/* ✅ MASTER COD OVERRIDE SWITCH */}
+                                        <div className="flex items-center justify-between border rounded-md p-3">
+                                            <div className="space-y-0.5">
+                                                <Label>Allow COD Override</Label>
+                                                <div className="text-[10px] text-muted-foreground">Force enable COD over ₹999</div>
+                                            </div>
+                                            <Switch checked={newProduct.allow_cod_override} onCheckedChange={v => setNewProduct({...newProduct, allow_cod_override: v})} />
+                                        </div>
                                     </div>
                                     <div><Label>Short Desc</Label><Textarea value={newProduct.short_description} onChange={e => setNewProduct({...newProduct, short_description: e.target.value})} maxLength={150} /></div>
                                     {renderSpecInputs(false, newProduct.specs)}
@@ -761,6 +794,14 @@ export default function AdminDashboard() {
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <div><Label>Category</Label><Select value={editingProductData.category} onValueChange={v => setEditingProductData({...editingProductData, category: v, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                                     <div><Label>Sub</Label><Select value={editingProductData.sub_category} onValueChange={v => setEditingProductData({...editingProductData, sub_category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SUB_CATEGORIES[editingProductData.category]?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
+                                                </div>
+                                                {/* ✅ MASTER COD OVERRIDE SWITCH (EDIT MODE) */}
+                                                <div className="flex items-center justify-between border rounded-md p-3">
+                                                    <div className="space-y-0.5">
+                                                        <Label>Allow COD Override</Label>
+                                                        <div className="text-[10px] text-muted-foreground">Force enable COD over ₹999</div>
+                                                    </div>
+                                                    <Switch checked={editingProductData.allow_cod_override} onCheckedChange={v => setEditingProductData({...editingProductData, allow_cod_override: v})} />
                                                 </div>
                                             </div>
                                             <div><Label>Short Desc</Label><Textarea value={editingProductData.short_description} onChange={e => setEditingProductData({...editingProductData, short_description: e.target.value})} /></div>
