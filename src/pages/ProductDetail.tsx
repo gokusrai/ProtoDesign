@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
     Loader2,
     ShoppingCart,
@@ -100,6 +102,7 @@ interface EditableProductState {
     videoFile: File | null;
     videoPreview: string | null;
     deleteVideo: boolean;
+    allowCodOverride: boolean; // ✅ Added COD Override State
 }
 
 const CATEGORY_ROUTES: Record<string, string> = {
@@ -281,7 +284,10 @@ const ProductDetail = () => {
     const startEditing = () => {
         if (!product) return;
 
-        const specsArray: EditableSpec[] = normalizeSpecs(product.specifications).map((item) => ({
+        // ✅ Parse specifications and extract the COD override flag
+        const rawSpecs = normalizeSpecs(product.specifications);
+        const hasOverride = rawSpecs.some(s => s.key === 'allow_cod_override' && String(s.value).toLowerCase() === 'true');
+        const cleanSpecs = rawSpecs.filter(s => s.key !== 'allow_cod_override').map((item) => ({
             id: Math.random().toString(36).substr(2, 9),
             key: item.key,
             value: item.value
@@ -295,14 +301,15 @@ const ProductDetail = () => {
             stock: product.stock,
             category: product.category,
             sub_category: product.sub_category || '',
-            specificationsArray: specsArray,
+            specificationsArray: cleanSpecs,
             currentImages: product.product_images || [],
             deletedImageIds: [],
             newImageFiles: [],
             newImagePreviews: [],
             videoFile: null,
             videoPreview: null,
-            deleteVideo: false
+            deleteVideo: false,
+            allowCodOverride: hasOverride // ✅ Initialize State
         };
 
         setEditState(initialState);
@@ -365,6 +372,12 @@ const ProductDetail = () => {
         setIsSaving(true);
         try {
             const specsToSave = editState.specificationsArray.map(({ key, value }) => ({ key, value }));
+            
+            // ✅ Inject COD Override back into specifications before saving
+            if (editState.allowCodOverride) {
+                specsToSave.push({ key: 'allow_cod_override', value: 'true' });
+            }
+
             const formData = new FormData();
             formData.append('name', editState.name);
             formData.append('description', editState.description);
@@ -825,6 +838,20 @@ const ProductDetail = () => {
                                 </>
                             )}
                         </div>
+
+                        {/* ✅ MASTER COD OVERRIDE SWITCH (UI) */}
+                        {isEditing && editState && (
+                            <div className="flex items-center justify-between border rounded-md p-3 mb-4 bg-muted/20 border-dashed border-primary/30">
+                                <div className="space-y-0.5">
+                                    <Label className="text-sm font-medium">Allow COD Override</Label>
+                                    <div className="text-[10px] text-muted-foreground">Force enable Cash on Delivery for orders over ₹999</div>
+                                </div>
+                                <Switch 
+                                    checked={editState.allowCodOverride} 
+                                    onCheckedChange={v => updateEditState({ allowCodOverride: v })} 
+                                />
+                            </div>
+                        )}
 
                         {isEditing && editState ? (
                             <Input
