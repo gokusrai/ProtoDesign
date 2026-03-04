@@ -28,7 +28,7 @@ router.get('/admin/all', authMiddleware, async (req, res, next) => {
                                          'product', json_build_object(
                                                  'name', p.name,
                                                  'image_url', p.image_url
-                                                    )
+                                            )
                                  )
                          ) FILTER (WHERE oi.id IS NOT NULL), '[]') AS items
             FROM orders o
@@ -162,9 +162,10 @@ router.post('/', authMiddleware, async (req, res, next) => {
         const { items, shippingAddress, paymentGateway } = req.body;
         if (!items || !items.length) return res.status(400).json({ error: 'No items in order' });
 
-        // 1. Fetch Product details from DB for security and category check
+        // 1. Fetch Product details from DB for security, category check, AND specifications
         const productIds = items.map(i => i.product_id);
-        const products = await db.many('SELECT id, price, stock, name, category FROM products WHERE id IN ($1:csv)', [productIds]);
+        // ✅ FETCH SPECIFICATIONS TO CHECK FOR COD OVERRIDE
+        const products = await db.many('SELECT id, price, stock, name, category, specifications FROM products WHERE id IN ($1:csv)', [productIds]);
         
         const productMap = {};
         products.forEach(p => productMap[p.id] = p);
@@ -172,6 +173,16 @@ router.post('/', authMiddleware, async (req, res, next) => {
         // 2. ENFORCE BUSINESS RULES (Recalculate logic based on DB verified values)
         const hasPrinter = products.some(p => p.category === '3d_printer');
         
+        // ✅ 160 IQ FIX: Check if admin manually forced COD availability via specs
+        const hasCodOverride = products.some(p => {
+            const specs = p.specifications;
+            if (!specs) return false;
+            // Handle Array format
+            if (Array.isArray(specs)) return specs.some(s => s.key === 'allow_cod_override' && String(s.value).toLowerCase() === 'true');
+            // Handle Object format
+            return String(specs.allow_cod_override).toLowerCase() === 'true';
+        });
+
         let shippingAmount = 0.00;
         if (!hasPrinter) {
             shippingAmount = (paymentGateway === 'cod') ? 300.00 : 199.00;
@@ -197,7 +208,8 @@ router.post('/', authMiddleware, async (req, res, next) => {
             if (hasPrinter) {
                 return res.status(400).json({ error: 'Cash on Delivery is not available for orders containing 3D Printers' });
             }
-            if (subtotal >= 999) {
+            // ✅ Dynamic check: Only block if NO override exists
+            if (subtotal >= 999 && !hasCodOverride) {
                 return res.status(400).json({ error: 'Cash on Delivery is only available for orders below ₹999' });
             }
         }
