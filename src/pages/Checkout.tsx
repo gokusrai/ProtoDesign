@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { PaymentGatewaySelector } from '@/components/PaymentGatewaySelector';
 import { formatINR } from '@/lib/currency';
 import { toast } from 'sonner';
-import { Loader2, Truck, CheckCircle2 } from 'lucide-react';
+import { Loader2, Truck, CheckCircle2, MapPin } from 'lucide-react';
 import { apiService } from '@/services/api.service';
 import {
     Select,
@@ -34,6 +34,7 @@ const Checkout = () => {
     const navigate = useNavigate();
     const { items, total, clearCart } = useCart();
     const [loading, setLoading] = useState(false);
+    const [fetchingPincode, setFetchingPincode] = useState(false);
 
     // Default to Online Payment
     const [selectedGateway, setSelectedGateway] = useState('phonepe');
@@ -56,8 +57,16 @@ const Checkout = () => {
     const subtotal = total;
     const hasPrinter = items.some(item => item.product.category === '3d_printer');
     
-    // COD is ONLY allowed if there are NO printers AND the subtotal is strictly less than ₹999
-    const isEligibleForCOD = !hasPrinter && subtotal < 999;
+    // --- 160 IQ Shipping & COD Logic ---
+    const hasCodOverride = items.some(item => {
+        const specs = item.product.specifications;
+        if (!specs) return false;
+        if (Array.isArray(specs)) return specs.some((s: any) => s.key === 'allow_cod_override' && String(s.value).toLowerCase() === 'true');
+        return String((specs as any).allow_cod_override).toLowerCase() === 'true';
+    });
+
+    // COD allowed if NO printers AND (Subtotal < 999 OR Admin forced Override)
+    const isEligibleForCOD = !hasPrinter && (subtotal < 999 || hasCodOverride);
 
     /**
      * Strategic Pricing Calculation:
@@ -73,12 +82,46 @@ const Checkout = () => {
     const gst = subtotal * 0.18;
     const finalTotal = subtotal + gst + shipping;
 
-    // Failsafe: If they somehow had COD selected but their cart crosses 999, force it back to PhonePe
+    // Failsafe: If they somehow had COD selected but their cart crosses limit and has no override, force it back to PhonePe
     useEffect(() => {
         if (!isEligibleForCOD && selectedGateway === 'cod') {
             setSelectedGateway('phonepe');
         }
     }, [isEligibleForCOD, selectedGateway]);
+
+    // ✅ NEW FEATURE: Auto-detect City and State from Pincode
+    useEffect(() => {
+        const fetchPincodeDetails = async () => {
+            if (formData.pincode.length === 6) {
+                setFetchingPincode(true);
+                try {
+                    const response = await fetch(`https://api.postalpincode.in/pincode/${formData.pincode}`);
+                    const data = await response.json();
+                    
+                    if (data && data[0] && data[0].Status === "Success" && data[0].PostOffice && data[0].PostOffice.length > 0) {
+                        const postOffice = data[0].PostOffice[0];
+                        const fetchedState = postOffice.State;
+                        const fetchedCity = postOffice.District || postOffice.Division || postOffice.Region;
+                        
+                        setFormData(prev => ({
+                            ...prev,
+                            state: fetchedState,
+                            city: fetchedCity
+                        }));
+                        toast.success("Location auto-detected from Pincode!", { icon: <MapPin className="text-green-500 w-4 h-4" /> });
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch pincode details", error);
+                    // Silently fail so user can still enter manually
+                } finally {
+                    setFetchingPincode(false);
+                }
+            }
+        };
+
+        // Trigger fetch only if the pincode is exactly 6 digits
+        fetchPincodeDetails();
+    }, [formData.pincode]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -244,7 +287,9 @@ const Checkout = () => {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="pincode">Pincode *</Label>
+                                    <Label htmlFor="pincode" className="flex items-center gap-2">
+                                        Pincode * {fetchingPincode && <Loader2 className="w-3 h-3 animate-spin text-primary" />}
+                                    </Label>
                                     <Input id="pincode" name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="110001" maxLength={6} />
                                 </div>
                                 <div className="md:col-span-2 space-y-2">
@@ -253,11 +298,11 @@ const Checkout = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="city">City *</Label>
-                                    <Input id="city" name="city" value={formData.city} onChange={handleInputChange} placeholder="New Delhi" />
+                                    <Input id="city" name="city" value={formData.city} onChange={handleInputChange} placeholder="New Delhi" disabled={fetchingPincode} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="state">State *</Label>
-                                    <Select onValueChange={(val) => setFormData(p => ({...p, state: val}))} value={formData.state}>
+                                    <Select onValueChange={(val) => setFormData(p => ({...p, state: val}))} value={formData.state} disabled={fetchingPincode}>
                                         <SelectTrigger className="bg-white">
                                             <SelectValue placeholder="Select State" />
                                         </SelectTrigger>
@@ -275,7 +320,7 @@ const Checkout = () => {
                                 amount={finalTotal}
                                 onSelect={setSelectedGateway}
                                 selected={selectedGateway}
-                                showCOD={isEligibleForCOD} // ✅ Dynamically blocked for items >= 999
+                                showCOD={isEligibleForCOD} // ✅ Dynamically blocked for items >= 999 unless Admin overridden
                             />
                         </Card>
                     </div>
@@ -337,9 +382,11 @@ const Checkout = () => {
                             <div className="mt-6 p-4 bg-slate-50 rounded-lg text-[11px] text-muted-foreground space-y-2">
                                 <p className="flex items-start gap-2">
                                     <span className="text-primary font-bold">•</span>
-                                    {/* ✅ Dynamic informative text based on eligibility */}
+                                    {/* ✅ Dynamic informative text based on eligibility and admin override */}
                                     {hasPrinter 
                                         ? "Orders containing 3D Printers are ineligible for Cash on Delivery." 
+                                        : hasCodOverride
+                                        ? "Cash on Delivery has been specially enabled for the items in your cart."
                                         : "Cash on Delivery is only available for orders below ₹999."}
                                 </p>
                                 <p className="flex items-start gap-2">
