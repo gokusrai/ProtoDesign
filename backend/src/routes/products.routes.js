@@ -242,6 +242,38 @@ router.get('/:id', async (req, res) => {
 });
 
 // ==========================================
+// CUSTOMER ACTIONS (LIKES & REVIEWS)
+// ==========================================
+router.post('/:id/like', authMiddleware, async (req, res) => {
+    try {
+        await db.none('UPDATE products SET likes_count = likes_count + 1 WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+router.delete('/:id/like', authMiddleware, async (req, res) => {
+    try {
+        await db.none('UPDATE products SET likes_count = GREATEST(likes_count - 1, 0) WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+router.post('/:id/reviews', authMiddleware, async (req, res) => {
+    try {
+        const { rating, comment } = req.body;
+        const product = await db.oneOrNone('SELECT id FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+        
+        await db.none('INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4)', [product.id, req.userId, rating, comment]);
+        const stats = await db.one('SELECT AVG(rating) as avg, COUNT(id) as count FROM reviews WHERE product_id = $1', [product.id]);
+        await db.none('UPDATE products SET average_rating = $1, review_count = $2 WHERE id = $3', [stats.avg || 0, stats.count, product.id]);
+        
+        res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: error.message }); }
+});
+
+
+// ==========================================
 // ADMIN ACTIONS
 // ==========================================
 
@@ -249,12 +281,16 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
         
+        // ✅ FIX: Parse specs to JSON object before DB insert to prevent strict-type crashes
+        let parsedSpecs = {};
+        try { parsedSpecs = specifications ? JSON.parse(specifications) : {}; } catch(e) {}
+
         const slug = await generateUniqueSlug(name);
 
         const product = await db.one(
             `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, is_archived)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-            [name, slug, description, short_description, price, category, stock, specifications, is_archived === 'true']
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9) RETURNING *`,
+            [name, slug, description, short_description, price, category, stock, parsedSpecs, is_archived === 'true']
         );
 
         if (req.files && req.files['images']) {
@@ -272,6 +308,10 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
 
+        // ✅ FIX: Parse specs to JSON object before DB insert to prevent strict-type crashes
+        let parsedSpecs = {};
+        try { parsedSpecs = specifications ? JSON.parse(specifications) : {}; } catch(e) {}
+
         const existing = await db.one('SELECT name, slug FROM products WHERE id = $1', [req.params.id]);
         let slug = existing.slug;
         
@@ -281,9 +321,9 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
 
         await db.none(
             `UPDATE products
-             SET name=$1, slug=$2, description=$3, short_description=$4, price=$5, category=$6, stock=$7, specifications=$8, is_archived=$9, updated_at=NOW()
+             SET name=$1, slug=$2, description=$3, short_description=$4, price=$5, category=$6, stock=$7, specifications=$8::jsonb, is_archived=$9, updated_at=NOW()
              WHERE id=$10`,
-            [name, slug, description, short_description, price, category, stock, specifications, is_archived === 'true', req.params.id]
+            [name, slug, description, short_description, price, category, stock, parsedSpecs, is_archived === 'true', req.params.id]
         );
 
         if (imagesToDelete) {
