@@ -27,6 +27,15 @@ export const PaymentGatewaySelector = ({
 }: PaymentGatewaySelectorProps) => {
     const [selectedGateway, setSelectedGateway] = useState(selected || 'phonepe');
 
+    // ✅ FIX: Sync internal state with parent changes
+    // This is crucial because if Checkout.tsx dynamically disables COD, 
+    // it will force the selection back to 'phonepe', and we need the UI to reflect that.
+    useEffect(() => {
+        if (selected) {
+            setSelectedGateway(selected);
+        }
+    }, [selected]);
+
     useEffect(() => {
         if (!selected) {
             onSelect('phonepe');
