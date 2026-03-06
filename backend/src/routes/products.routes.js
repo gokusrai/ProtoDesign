@@ -140,6 +140,8 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
 
             try {
                 const specs = parseSpecs(p.specifications || "");
+                // ✅ FIX: Stringify specs to prevent text[] casting crash
+                const specsString = JSON.stringify(specs);
                 const cat = p.category ? p.category.toLowerCase().replace(/ /g, '_') : 'uncategorized';
                 
                 const slug = await generateUniqueSlug(p.name);
@@ -148,8 +150,8 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
                     `INSERT INTO products (
                         name, slug, price, stock, category, sub_category,
                         short_description, description, specifications
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-                    [p.name, slug, parseFloat(rawPrice), parseInt(rawStock), cat, p.sub_category || '', p.short_description || '', p.description || '', specs]
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) RETURNING id`,
+                    [p.name, slug, parseFloat(rawPrice), parseInt(rawStock), cat, p.sub_category || '', p.short_description || '', p.description || '', specsString]
                 );
 
                 if (p.images) {
@@ -281,16 +283,21 @@ router.post('/', authMiddleware, isAdmin, upload.fields([{ name: 'images', maxCo
     try {
         const { name, description, short_description, price, category, stock, specifications, is_archived } = req.body;
         
-        // ✅ FIX: Parse specs to JSON object before DB insert to prevent strict-type crashes
-        let parsedSpecs = {};
-        try { parsedSpecs = specifications ? JSON.parse(specifications) : {}; } catch(e) {}
+        // ✅ FIX: Stringify specifications to prevent pg-promise from formatting arrays as text[]
+        let specsToSave = '{}';
+        try {
+            if (specifications) {
+                const parsed = typeof specifications === 'string' ? JSON.parse(specifications) : specifications;
+                specsToSave = JSON.stringify(parsed);
+            }
+        } catch(e) {}
 
         const slug = await generateUniqueSlug(name);
 
         const product = await db.one(
             `INSERT INTO products (name, slug, description, short_description, price, category, stock, specifications, is_archived)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9) RETURNING *`,
-            [name, slug, description, short_description, price, category, stock, parsedSpecs, is_archived === 'true']
+            [name, slug, description, short_description, price, category, stock, specsToSave, is_archived === 'true']
         );
 
         if (req.files && req.files['images']) {
@@ -308,9 +315,14 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
     try {
         const { name, description, short_description, price, category, stock, specifications, imagesToDelete, is_archived } = req.body;
 
-        // ✅ FIX: Parse specs to JSON object before DB insert to prevent strict-type crashes
-        let parsedSpecs = {};
-        try { parsedSpecs = specifications ? JSON.parse(specifications) : {}; } catch(e) {}
+        // ✅ FIX: Stringify specifications to prevent pg-promise from formatting arrays as text[]
+        let specsToSave = '{}';
+        try {
+            if (specifications) {
+                const parsed = typeof specifications === 'string' ? JSON.parse(specifications) : specifications;
+                specsToSave = JSON.stringify(parsed);
+            }
+        } catch(e) {}
 
         const existing = await db.one('SELECT name, slug FROM products WHERE id = $1', [req.params.id]);
         let slug = existing.slug;
@@ -323,7 +335,7 @@ router.put('/:id', authMiddleware, isAdmin, upload.fields([{ name: 'images', max
             `UPDATE products
              SET name=$1, slug=$2, description=$3, short_description=$4, price=$5, category=$6, stock=$7, specifications=$8::jsonb, is_archived=$9, updated_at=NOW()
              WHERE id=$10`,
-            [name, slug, description, short_description, price, category, stock, parsedSpecs, is_archived === 'true', req.params.id]
+            [name, slug, description, short_description, price, category, stock, specsToSave, is_archived === 'true', req.params.id]
         );
 
         if (imagesToDelete) {
