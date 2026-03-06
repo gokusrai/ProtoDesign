@@ -377,4 +377,92 @@ router.patch('/:id/restore', authMiddleware, isAdmin, async (req, res) => {
     try { await db.none('UPDATE products SET is_archived = false WHERE id = $1', [req.params.id]); res.json({ message: 'Restored' }); } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// ==========================================
+// ✅ 160 IQ: AUTOMATED REVIEW SEEDER
+// ==========================================
+router.post('/seed-reviews', authMiddleware, isAdmin, async (req, res) => {
+    try {
+        // 1. Create Authentic-Looking Dummy Users
+        const dummyNames = [
+            'Rahul Verma', 'Sneha Iyer', 'Kunal Kapoor', 'Aditi Desai', 
+            'Rakesh Singh', 'Pooja Nair', 'Siddharth Rao', 'Neha Gupta', 
+            'Vikram Patel', 'Priya Sharma'
+        ];
+        const userIds = [];
+        
+        for (const name of dummyNames) {
+            const email = `${name.toLowerCase().replace(' ', '.')}@verified.local`;
+            let u = await db.oneOrNone('SELECT id FROM users WHERE email = $1', [email]);
+            if (!u) {
+                u = await db.one(
+                    'INSERT INTO users (email, password_hash, full_name, role) VALUES ($1, $2, $3, $4) RETURNING id', 
+                    [email, 'dummy_hash', name, 'customer']
+                );
+            }
+            userIds.push(u.id);
+        }
+
+        // 2. Fetch all active products
+        const products = await db.any('SELECT id, category FROM products');
+
+        // 3. Realistic Context-Aware Review Banks
+        const printerReviews = [
+            { rating: 5, comment: "Incredible print quality right out of the box. Setup took less than 30 minutes! Very happy with ProtoDesign's service." },
+            { rating: 4, comment: "Very sturdy build. The UI is responsive and prints are highly accurate. Good value for money." },
+            { rating: 5, comment: "I've used many machines, but this one takes the crown for reliability. Highly recommend it to anyone starting out." },
+            { rating: 5, comment: "Silent printing and amazing bed adhesion. The delivery was incredibly fast." },
+            { rating: 4, comment: "Solid machine. The packaging was excellent and arrived in perfect condition." }
+        ];
+
+        const materialReviews = [
+            { rating: 5, comment: "Fantastic material! No stringing, great layer adhesion, and the color is exactly as shown." },
+            { rating: 5, comment: "Prints flawlessly on my setup. Will definitely be buying my supplies from here from now on." },
+            { rating: 4, comment: "Good quality, doesn't clog the nozzle. Very satisfied with the final finish of my prints." },
+            { rating: 5, comment: "Highly detailed prints and very little shrinkage. Highly recommend this brand." }
+        ];
+
+        const generalReviews = [
+            { rating: 5, comment: "Exactly as described. Fast shipping and excellent quality." },
+            { rating: 4, comment: "Very happy with my purchase. Works perfectly as expected." },
+            { rating: 5, comment: "Premium quality! You can trust this store, their customer support is also great." }
+        ];
+
+        // 4. Inject Reviews Safely
+        let addedCount = 0;
+        for (const p of products) {
+            // Generate 2 to 4 reviews per product
+            const numReviews = Math.floor(Math.random() * 3) + 2; 
+            const shuffledUsers = userIds.sort(() => 0.5 - Math.random()).slice(0, numReviews);
+
+            let reviewBank = generalReviews;
+            if (p.category === '3d_printer') reviewBank = printerReviews;
+            else if (['filament', 'resin'].includes(p.category)) reviewBank = materialReviews;
+
+            for(const uid of shuffledUsers) {
+                const r = reviewBank[Math.floor(Math.random() * reviewBank.length)];
+                
+                // Randomize the date (between 1 and 45 days ago) to make it look organic
+                const daysAgo = Math.floor(Math.random() * 45) + 1;
+                const jitteredDate = new Date();
+                jitteredDate.setDate(jitteredDate.getDate() - daysAgo);
+
+                const existing = await db.oneOrNone('SELECT id FROM reviews WHERE product_id = $1 AND user_id = $2', [p.id, uid]);
+                if (!existing) {
+                    await db.none('INSERT INTO reviews (product_id, user_id, rating, comment, created_at) VALUES ($1, $2, $3, $4, $5)', [p.id, uid, r.rating, r.comment, jitteredDate]);
+                    addedCount++;
+                }
+            }
+
+            // 5. Instantly Update Product Averages
+            const stats = await db.one('SELECT AVG(rating) as avg, COUNT(id) as count FROM reviews WHERE product_id = $1', [p.id]);
+            await db.none('UPDATE products SET average_rating = $1, review_count = $2 WHERE id = $3', [stats.avg || 0, stats.count, p.id]);
+        }
+
+        res.json({ success: true, message: `Successfully injected ${addedCount} authentic reviews across your store.` });
+    } catch (error) {
+        console.error("Seeder Error:", error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
