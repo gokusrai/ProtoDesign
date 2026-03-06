@@ -42,7 +42,8 @@ import {
     Maximize,
     ChevronLeft,
     Archive,
-    RefreshCw
+    RefreshCw,
+    Star
 } from 'lucide-react';
 import { formatINR } from '@/lib/currency';
 import { apiService } from '@/services/api.service';
@@ -158,7 +159,7 @@ interface ProductFormState {
     imageFiles: File[];
     videoFile: File | null;
     specs: SpecItem[];
-    allow_cod_override: boolean; // ✅ Added override state
+    allow_cod_override: boolean;
 }
 
 interface EditingProductImageState {
@@ -182,6 +183,7 @@ export default function AdminDashboard() {
     // -- UI State --
     const [showAddProduct, setShowAddProduct] = useState(false);
     const [showArchived, setShowArchived] = useState(false);
+    const [isSeedingReviews, setIsSeedingReviews] = useState(false);
 
     // -- Pagination State --
     const [ordersPage, setOrdersPage] = useState(1);
@@ -365,7 +367,6 @@ export default function AdminDashboard() {
                 return acc;
             }, {} as Record<string, string>);
 
-            // ✅ Inject COD Override into specifications
             if (newProduct.allow_cod_override) {
                 specsObject['allow_cod_override'] = 'true';
             }
@@ -398,7 +399,6 @@ export default function AdminDashboard() {
         let specsArray: SpecItem[] = [];
         let hasOverride = false;
         
-        // ✅ Safely parse existing specifications and extract override flag
         if (p.specifications) {
             if (Array.isArray(p.specifications)) {
                 hasOverride = p.specifications.some((s: any) => s.key === 'allow_cod_override' && String(s.value).toLowerCase() === 'true');
@@ -456,7 +456,6 @@ export default function AdminDashboard() {
                 return acc;
             }, {} as Record<string, string>);
 
-            // ✅ Inject COD Override into specifications
             if (editingProductData.allow_cod_override) {
                 specsObject['allow_cod_override'] = 'true';
             }
@@ -531,6 +530,20 @@ export default function AdminDashboard() {
             fetchDashboardData();
         } catch (e) {
             toast.error("Action failed");
+        }
+    };
+
+    const handleSeedReviews = async () => {
+        if (!window.confirm("This will inject authentic 4 and 5 star reviews into ALL products. Proceed?")) return;
+        setIsSeedingReviews(true);
+        try {
+            const res = await apiService.request('/products/seed-reviews', { method: 'POST' });
+            toast.success((res as any).message || "Reviews generated successfully!");
+            fetchDashboardData(); // Refresh UI to show new star ratings
+        } catch (e: any) {
+            toast.error(e.message || "Failed to generate reviews");
+        } finally {
+            setIsSeedingReviews(false);
         }
     };
 
@@ -708,7 +721,20 @@ export default function AdminDashboard() {
                     <CardHeader>
                         <div className="flex justify-between items-center">
                             <div><CardTitle>Inventory</CardTitle><CardDescription>Manage catalog</CardDescription></div>
-                            <Button onClick={() => setShowAddProduct(!showAddProduct)} size="sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
+                            <div className="flex items-center gap-2">
+                                {/* ✅ THE NEW SEEDER BUTTON */}
+                                <Button 
+                                    onClick={handleSeedReviews} 
+                                    disabled={isSeedingReviews}
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="hidden md:flex border-yellow-400 text-yellow-600 hover:bg-yellow-50"
+                                >
+                                    {isSeedingReviews ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Star className="mr-2 h-4 w-4" fill="currentColor" />}
+                                    {isSeedingReviews ? 'Generating...' : 'Generate Reviews'}
+                                </Button>
+                                <Button onClick={() => setShowAddProduct(!showAddProduct)} size="sm"><Plus className="mr-2 h-4 w-4" /> Add Product</Button>
+                            </div>
                         </div>
                     </CardHeader>
 
