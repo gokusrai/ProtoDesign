@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
     Loader2,
@@ -102,7 +101,7 @@ interface EditableProductState {
     videoFile: File | null;
     videoPreview: string | null;
     deleteVideo: boolean;
-    allowCodOverride: boolean; // ✅ Added COD Override State
+    allowCodOverride: boolean; 
 }
 
 const CATEGORY_ROUTES: Record<string, string> = {
@@ -574,7 +573,6 @@ const ProductDetail = () => {
     // --- SEO & SCHEMA GENERATION ---
     const siteUrl = window.location.origin;
     
-    // SEO FIX: Priority to Slug in URLs
     const currentUrl = product?.slug 
         ? `${siteUrl}/product/${product.slug}` 
         : `${siteUrl}/product/${productId}`;
@@ -587,11 +585,9 @@ const ProductDetail = () => {
         ? allImages.map(img => img.startsWith('http') ? img : `${siteUrl}${img}`) 
         : [fullImageUrl];
 
-    // SEO FIX: 1 Year Validity to clear Search Console Warnings
     const priceValidUntil = new Date();
     priceValidUntil.setFullYear(priceValidUntil.getFullYear() + 1);
 
-    // SEO FIX: Deep E-Commerce Schema Injection
     const productSchema = product ? {
         "@context": "https://schema.org/",
         "@type": "Product",
@@ -805,11 +801,11 @@ const ProductDetail = () => {
                     </div>
 
                     <div className="flex flex-col pt-4">
-                        <div className="mb-4 flex flex-wrap items-center gap-2">
+                        <div className="mb-4 flex flex-wrap items-center gap-3">
                             {isEditing && editState ? (
                                 <>
                                     <Select value={editState.category} onValueChange={(val) => updateEditState({ category: val })}>
-                                        <SelectTrigger className="w-[140px] h-8 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger className="w-[140px] h-9 text-xs font-bold uppercase"><SelectValue /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="3d_printer">3D Printer</SelectItem>
                                             <SelectItem value="filament">Filament</SelectItem>
@@ -821,9 +817,26 @@ const ProductDetail = () => {
                                     <Input
                                         value={editState.sub_category}
                                         onChange={(e) => updateEditState({ sub_category: e.target.value })}
-                                        className="w-[140px] h-8 text-xs font-semibold uppercase"
+                                        className="w-[140px] h-9 text-xs font-semibold uppercase"
                                         placeholder="Sub Category"
                                     />
+                                    
+                                    {/* ✅ MASTER COD OVERRIDE EXPLICIT DROPDOWN */}
+                                    <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-md border border-dashed ml-auto">
+                                        <Label className="text-xs font-bold whitespace-nowrap pl-2">COD Override:</Label>
+                                        <Select 
+                                            value={editState.allowCodOverride ? "true" : "false"} 
+                                            onValueChange={val => updateEditState({ allowCodOverride: val === "true" })}
+                                        >
+                                            <SelectTrigger className={`w-[150px] h-8 text-xs font-bold ${editState.allowCodOverride ? "border-green-500 bg-green-100 text-green-800" : ""}`}>
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="false">Standard Rules</SelectItem>
+                                                <SelectItem value="true" className="text-green-700 font-bold">Force Enable COD</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
                                 </>
                             ) : (
                                 <>
@@ -838,20 +851,6 @@ const ProductDetail = () => {
                                 </>
                             )}
                         </div>
-
-                        {/* ✅ MASTER COD OVERRIDE SWITCH (UI) */}
-                        {isEditing && editState && (
-                            <div className="flex items-center justify-between border rounded-md p-3 mb-4 bg-muted/20 border-dashed border-primary/30">
-                                <div className="space-y-0.5">
-                                    <Label className="text-sm font-medium">Allow COD Override</Label>
-                                    <div className="text-[10px] text-muted-foreground">Force enable Cash on Delivery for orders over ₹999</div>
-                                </div>
-                                <Switch 
-                                    checked={editState.allowCodOverride} 
-                                    onCheckedChange={v => updateEditState({ allowCodOverride: v })} 
-                                />
-                            </div>
-                        )}
 
                         {isEditing && editState ? (
                             <Input
