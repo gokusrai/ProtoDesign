@@ -159,7 +159,7 @@ interface ProductFormState {
     imageFiles: File[];
     videoFile: File | null;
     specs: SpecItem[];
-    allow_cod_override: boolean;
+    allow_cod_override: boolean; 
 }
 
 interface EditingProductImageState {
@@ -767,17 +767,23 @@ export default function AdminDashboard() {
                                         <div><Label>Name</Label><Input value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} required /></div>
                                         <div><Label>Price</Label><Input type="number" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} required /></div>
                                         <div><Label>Stock</Label><Input type="number" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} required /></div>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        
+                                        {/* ✅ MASTER COD OVERRIDE EXPLICIT DROPDOWN (ADD MODE) */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 col-span-1 md:col-span-2">
                                             <div><Label>Category</Label><Select value={newProduct.category} onValueChange={val => setNewProduct({...newProduct, category: val, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                             <div><Label>Sub</Label><Select value={newProduct.sub_category} onValueChange={val => setNewProduct({...newProduct, sub_category: val})} disabled={!SUB_CATEGORIES[newProduct.category]}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent>{SUB_CATEGORIES[newProduct.category]?.map(sc => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}</SelectContent></Select></div>
-                                        </div>
-                                        {/* ✅ MASTER COD OVERRIDE SWITCH */}
-                                        <div className="flex items-center justify-between border rounded-md p-3">
-                                            <div className="space-y-0.5">
-                                                <Label>Allow COD Override</Label>
-                                                <div className="text-[10px] text-muted-foreground">Force enable COD over ₹999</div>
+                                            <div>
+                                                <Label>COD Override (>₹999)</Label>
+                                                <Select value={newProduct.allow_cod_override ? "true" : "false"} onValueChange={val => setNewProduct({...newProduct, allow_cod_override: val === "true"})}>
+                                                    <SelectTrigger className={newProduct.allow_cod_override ? "border-green-500 bg-green-50 text-green-700 font-bold" : ""}>
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="false">Standard Rules</SelectItem>
+                                                        <SelectItem value="true" className="text-green-700 font-bold">Force Enable COD</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
-                                            <Switch checked={newProduct.allow_cod_override} onCheckedChange={v => setNewProduct({...newProduct, allow_cod_override: v})} />
                                         </div>
                                     </div>
                                     <div><Label>Short Desc</Label><Textarea value={newProduct.short_description} onChange={e => setNewProduct({...newProduct, short_description: e.target.value})} maxLength={150} /></div>
@@ -817,17 +823,23 @@ export default function AdminDashboard() {
                                                 <div><Label>Name</Label><Input value={editingProductData.name} onChange={e => setEditingProductData({...editingProductData, name: e.target.value})} /></div>
                                                 <div><Label>Price</Label><Input type="number" value={editingProductData.price} onChange={e => setEditingProductData({...editingProductData, price: e.target.value})} /></div>
                                                 <div><Label>Stock</Label><Input type="number" value={editingProductData.stock} onChange={e => setEditingProductData({...editingProductData, stock: e.target.value})} /></div>
-                                                <div className="grid grid-cols-2 gap-2">
+                                                
+                                                {/* ✅ MASTER COD OVERRIDE EXPLICIT DROPDOWN (EDIT MODE) */}
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 col-span-1 md:col-span-2">
                                                     <div><Label>Category</Label><Select value={editingProductData.category} onValueChange={v => setEditingProductData({...editingProductData, category: v, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                                     <div><Label>Sub</Label><Select value={editingProductData.sub_category} onValueChange={v => setEditingProductData({...editingProductData, sub_category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SUB_CATEGORIES[editingProductData.category]?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
-                                                </div>
-                                                {/* ✅ MASTER COD OVERRIDE SWITCH (EDIT MODE) */}
-                                                <div className="flex items-center justify-between border rounded-md p-3">
-                                                    <div className="space-y-0.5">
-                                                        <Label>Allow COD Override</Label>
-                                                        <div className="text-[10px] text-muted-foreground">Force enable COD over ₹999</div>
+                                                    <div>
+                                                        <Label>COD Override (>₹999)</Label>
+                                                        <Select value={editingProductData.allow_cod_override ? "true" : "false"} onValueChange={val => setEditingProductData({...editingProductData, allow_cod_override: val === "true"})}>
+                                                            <SelectTrigger className={editingProductData.allow_cod_override ? "border-green-500 bg-green-50 text-green-700 font-bold" : ""}>
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="false">Standard Rules</SelectItem>
+                                                                <SelectItem value="true" className="text-green-700 font-bold">Force Enable COD</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </div>
-                                                    <Switch checked={editingProductData.allow_cod_override} onCheckedChange={v => setEditingProductData({...editingProductData, allow_cod_override: v})} />
                                                 </div>
                                             </div>
                                             <div><Label>Short Desc</Label><Textarea value={editingProductData.short_description} onChange={e => setEditingProductData({...editingProductData, short_description: e.target.value})} /></div>
