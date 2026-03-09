@@ -412,8 +412,8 @@ router.post('/seed-reviews', authMiddleware, isAdmin, async (req, res) => {
             let u = await db.oneOrNone('SELECT id FROM users WHERE email = $1', [email]);
             if (!u) {
                 u = await db.one(
-                    'INSERT INTO users (email, password_hash, full_name, role) VALUES ($1, $2, $3, $4) RETURNING id', 
-                    [email, 'dummy_hash', name, 'customer']
+                    'INSERT INTO users (email, password_hash, full_name) VALUES ($1, $2, $3) RETURNING id', 
+                    [email, 'dummy_hash-review_seeder', name]
                 );
             }
             userIds.push(u.id);
@@ -435,7 +435,7 @@ router.post('/seed-reviews', authMiddleware, isAdmin, async (req, res) => {
             { rating: 5, comment: "Fantastic material! No stringing, great layer adhesion, and the color is exactly as shown." },
             { rating: 5, comment: "Prints flawlessly on my setup. Will definitely be buying my supplies from here from now on." },
             { rating: 4, comment: "Good quality, doesn't clog the nozzle. Very satisfied with the final finish of my prints." },
-            { rating: 5, comment: "Highly detailed prints and very little shrinkage. Highly recommend this brand." }
+            { rating: 4, comment: "Highly detailed prints and very little shrinkage. Highly recommend this brand." }
         ];
 
         const generalReviews = [
