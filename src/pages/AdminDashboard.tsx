@@ -773,7 +773,7 @@ export default function AdminDashboard() {
                                             <div><Label>Category</Label><Select value={newProduct.category} onValueChange={val => setNewProduct({...newProduct, category: val, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                             <div><Label>Sub</Label><Select value={newProduct.sub_category} onValueChange={val => setNewProduct({...newProduct, sub_category: val})} disabled={!SUB_CATEGORIES[newProduct.category]}><SelectTrigger><SelectValue placeholder="None" /></SelectTrigger><SelectContent>{SUB_CATEGORIES[newProduct.category]?.map(sc => <SelectItem key={sc} value={sc}>{sc}</SelectItem>)}</SelectContent></Select></div>
                                             <div>
-                                                <Label>COD Override (>₹999)</Label>
+                                                <Label>COD Override (&gt;₹999)</Label>
                                                 <Select value={newProduct.allow_cod_override ? "true" : "false"} onValueChange={val => setNewProduct({...newProduct, allow_cod_override: val === "true"})}>
                                                     <SelectTrigger className={newProduct.allow_cod_override ? "border-green-500 bg-green-50 text-green-700 font-bold" : ""}>
                                                         <SelectValue />
@@ -829,7 +829,7 @@ export default function AdminDashboard() {
                                                     <div><Label>Category</Label><Select value={editingProductData.category} onValueChange={v => setEditingProductData({...editingProductData, category: v, sub_category: ''})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{MAIN_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}</SelectContent></Select></div>
                                                     <div><Label>Sub</Label><Select value={editingProductData.sub_category} onValueChange={v => setEditingProductData({...editingProductData, sub_category: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{SUB_CATEGORIES[editingProductData.category]?.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
                                                     <div>
-                                                        <Label>COD Override (>₹999)</Label>
+                                                        <Label>COD Override (&gt;₹999)</Label>
                                                         <Select value={editingProductData.allow_cod_override ? "true" : "false"} onValueChange={val => setEditingProductData({...editingProductData, allow_cod_override: val === "true"})}>
                                                             <SelectTrigger className={editingProductData.allow_cod_override ? "border-green-500 bg-green-50 text-green-700 font-bold" : ""}>
                                                                 <SelectValue />
