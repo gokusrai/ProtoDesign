@@ -179,6 +179,23 @@ router.post('/bulk', authMiddleware, isAdmin, upload.single('file'), async (req,
     }
 });
 
+router.get('/:id/reviews', async (req, res) => {
+    try {
+        const product = await db.oneOrNone('SELECT id FROM products WHERE id::text = $1 OR slug = $1', [req.params.id]);
+        if (!product) return res.status(404).json({ error: 'Product not found' });
+
+        const reviews = await db.any(`
+            SELECT r.*, COALESCE(u.full_name, 'Anonymous') as user
+            FROM reviews r LEFT JOIN users u ON r.user_id = u.id
+            WHERE r.product_id = $1 ORDER BY r.created_at DESC
+        `, [product.id]);
+        
+        res.json(reviews);
+    } catch (error) { 
+        res.status(500).json({ error: error.message }); 
+    }
+});
+
 // ==========================================
 // PUBLIC ROUTES
 // ==========================================
