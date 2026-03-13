@@ -649,7 +649,7 @@ const ProductDetail = () => {
 
     const inStock = isEditing ? (editState?.stock ?? 0) > 0 : product.stock > 0;
     const averageRating = product.average_rating ? Number(product.average_rating) : 0;
-    const displaySpecs = normalizeSpecs(product.specifications);
+    const displaySpecs = normalizeSpecs(product.specifications).filter(s => s.key !== 'allow_cod_override');
 
     return (
         <>
